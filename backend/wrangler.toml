@@ -1,0 +1,21 @@
+name = "workshop-api"
+main = "src/index.js"
+compatibility_date = "2026-03-03"
+
+[vars]
+APP_ENV = "development"
+DEFAULT_TIMEZONE = "Asia/Kolkata"
+DEFAULT_DAY_CLOSE = "23:59"
+DEFAULT_GST_RATE_BPS = "1800"
+DEFAULT_VALUATION_METHOD = "WEIGHTED_AVERAGE"
+DEFAULT_TENANT_CODE = "default_tenant"
+DEFAULT_TENANT_NAME = "Default Workshop"
+
+# Set these securely via `wrangler secret put`:
+# SUPABASE_URL
+# SUPABASE_PUBLISHABLE_KEY
+# SUPABASE_SECRET_KEY
+# Legacy fallback (optional): SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY
+# SUPABASE_DB_URL
+# JWT_ISSUER
+# JWT_AUDIENCE

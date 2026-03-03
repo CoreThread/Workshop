@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Workshop Phase 2-3 UI</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main class="container">
+    <h1>Workshop - Phase 2/3</h1>
+    <p class="subtitle">Case + Follow-up + Daily Close</p>
+
+    <section class="card">
+      <h2>Connection</h2>
+      <label>API Base URL</label>
+      <input id="apiBase" value="http://127.0.0.1:8790" />
+      <button id="saveApiBase">Save API Base</button>
+    </section>
+
+    <section class="card">
+      <h2>Login</h2>
+      <label>Email</label>
+      <input id="email" value="admin@rajeshelec.local" />
+      <label>Password</label>
+      <input id="password" type="password" value="Admin@12345!" />
+      <div class="row">
+        <button id="loginBtn">Login</button>
+        <button id="logoutBtn" class="ghost">Logout</button>
+      </div>
+      <p id="whoami" class="hint">Not logged in</p>
+    </section>
+
+    <section class="card">
+      <h2>Create Case</h2>
+      <label>Case No</label>
+      <input id="caseNo" placeholder="AJ-101" />
+      <label>Customer Name</label>
+      <input id="customerName" placeholder="Ramesh" />
+      <label>Customer Phone</label>
+      <input id="customerPhone" placeholder="9876500011" />
+      <label>Item Category</label>
+      <input id="itemCategory" value="fan" />
+      <label>Reported Issue</label>
+      <input id="reportedIssue" placeholder="Not rotating" />
+      <button id="createCaseBtn">Create Case</button>
+      <p id="createResult" class="hint"></p>
+    </section>
+
+    <section class="card">
+      <h2>Search Cases</h2>
+      <label>By Case No</label>
+      <input id="searchCaseNo" placeholder="AJ-101" />
+      <label>By Phone</label>
+      <input id="searchPhone" placeholder="9876500011" />
+      <button id="searchBtn">Search</button>
+      <div id="searchResults"></div>
+    </section>
+
+    <section class="card">
+      <h2>Update Item Status</h2>
+      <label>Case ID</label>
+      <input id="statusCaseId" />
+      <label>Case Item ID</label>
+      <input id="statusItemId" />
+      <label>To Status</label>
+      <select id="toStatus">
+        <option>Diagnosis</option>
+        <option>WaitingApproval</option>
+        <option>ApprovedForRepair</option>
+        <option>RejectedByCustomer</option>
+        <option>InRepair</option>
+        <option>Ready</option>
+        <option>Delivered</option>
+        <option>Cancelled</option>
+      </select>
+      <label>Note</label>
+      <input id="statusNote" placeholder="optional note" />
+      <button id="updateStatusBtn">Update Status</button>
+      <p id="statusResult" class="hint"></p>
+      <button id="historyBtn" class="ghost">Load Status History</button>
+      <pre id="history"></pre>
+    </section>
+
+    <section class="card">
+      <h2>Follow-up Queue (Phase 3)</h2>
+      <label>Queue</label>
+      <select id="followupQueue">
+        <option value="pending_approvals">pending_approvals</option>
+        <option value="pending_pickups">pending_pickups</option>
+      </select>
+      <label>Item Status (optional)</label>
+      <input id="followupStatus" placeholder="WaitingApproval" />
+      <button id="loadFollowupsBtn">Load Follow-ups</button>
+      <div id="followupResults"></div>
+
+      <label>Case ID (for note update)</label>
+      <input id="followupCaseId" />
+      <label>Follow-up Note</label>
+      <input id="followupNote" placeholder="Called customer" />
+      <button id="saveFollowupNoteBtn">Save Follow-up Note</button>
+      <p id="followupResult" class="hint"></p>
+    </section>
+
+    <section class="card">
+      <h2>Daily Close Summary (Phase 3)</h2>
+      <label>Daily Close Note</label>
+      <input id="dailyCloseNote" placeholder="EOD close" />
+      <button id="runDailyCloseBtn">Run Daily Close</button>
+      <button id="loadDailyCloseBtn" class="ghost">Load Latest Daily Close</button>
+      <pre id="dailyCloseResult"></pre>
+    </section>
+  </main>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
