@@ -1,15 +1,36 @@
 # Workshop Project Handoff Status (for Private-System Continuation)
 
 ## 1) Current Snapshot
-- Date: 2026-03-03
+- Date: 2026-03-06
 - Workspace root: `c:\Users\utkjaiswal\Desktop\Workshop\Workshop`
 - GitHub repo: `https://github.com/CoreThread/Workshop`
-- Cloudflare dashboard Worker created: `https://workshop-api.jaiswal-utkarshuj.workers.dev`
-- Work laptop constraint: Cloudflare CLI login/deploy intentionally skipped due corporate block/risk.
+- Cloudflare Worker deployed and live: `https://workshop-api.jaiswal-utkarshuj.workers.dev`
+- Cloudflare CLI auth working on work laptop (`wrangler whoami` verified)
 
 ---
 
 ## 2) What Is Completed
+
+### Cloudflare Deployment (Work Laptop) — Completed (2026-03-06)
+- Upgraded Wrangler to `4.71.0` in backend project.
+- Authenticated Wrangler CLI successfully with OAuth.
+- Uploaded required Worker secrets from local `backend/.env`:
+  - `SUPABASE_URL`
+  - `SUPABASE_PUBLISHABLE_KEY`
+  - `SUPABASE_SECRET_KEY`
+  - `SUPABASE_DB_URL`
+  - `JWT_ISSUER`
+  - `JWT_AUDIENCE`
+- Deployed Worker successfully:
+  - URL: `https://workshop-api.jaiswal-utkarshuj.workers.dev`
+  - Version ID: `0098116a-0082-4623-9f0f-e2c5b4049f8f`
+- Live deployment checks passed:
+  - `GET /health` -> `ok: true` with all config readiness flags `true`
+  - `GET /v1/system/config-status` -> all required config flags `true`
+- Live authenticated write check passed:
+  - `POST /v1/auth/login` -> `OK`
+  - `POST /v1/cases` -> `OK`
+  - Case created: `LIVECHK-20260306162350`
 
 ### Phase 0 (Foundation & Contracts) — Completed
 - Backend scaffold created using Cloudflare Worker runtime.
@@ -138,9 +159,38 @@
   - `estimate_id`: `9af73e52-8227-478e-9fa5-c3ef0fc0966d`
   - Finalized state: `FINALIZED`, lock: `true`, override count: `1`
   - Credit note: `CN-2026-0303140543`
+- Live smoke test completed on deployed Cloudflare Worker (non-interrupted) (2026-03-06):
+  - Result: `PHASE4_LIVE_OK`
+  - Worker URL: `https://workshop-api.jaiswal-utkarshuj.workers.dev`
+  - Case: `P4-LIVE-20260306162745`
+  - `case_id`: `e0f62cb4-68a3-41aa-b0aa-6d9b7f7c0f91`
+  - `case_item_id`: `bd88f68d-2bf5-460a-b89e-983543374938`
+  - `estimate_id`: `0877f581-e6d5-440c-8cf3-aeb3af634760`
+  - Finalized state: `FINALIZED`, lock: `true`, override count: `1`
+  - Credit note: `CN-2026-0306105755`
 - Added helper scripts:
   - `backend/scripts/apply_migration_0005.mjs`
   - `backend/scripts/smoke_phase4_live.ps1`
+
+### Phase 4 UI (Minimal Operational Controls) — Implemented + Validated (2026-03-06)
+- Extended frontend in:
+  - `frontend/index.html`
+  - `frontend/app.js`
+- Added minimal Phase 4 operations UI (no design bloat):
+  - create estimate
+  - set estimate decision with consent snapshot fields
+  - finalize estimate
+  - override finalized estimate (with mandatory reason)
+  - create credit note
+  - fetch single estimate / list case estimates
+- Validation completed from UI against live Worker:
+  - `GET /v1/estimates/{estimate_id}` returned `code: OK`
+  - Verified fields:
+    - `invoice_state: FINALIZED`
+    - `is_financial_locked: true`
+    - `override_count: 1`
+    - `last_override_reason: UI override after finalize`
+    - consent snapshot persisted (`consent_template_version_id`, `consent_text_snapshot`)
 
 ---
 
@@ -189,29 +239,14 @@
 
 ## 5) What Is Left (Ordered)
 
-### A) Private PC: Complete Cloudflare CLI deployment
-1. `cd backend`
-2. `npx wrangler login`
-3. Set secrets:
-   - `npx wrangler secret put SUPABASE_URL`
-   - `npx wrangler secret put SUPABASE_PUBLISHABLE_KEY`
-   - `npx wrangler secret put SUPABASE_SECRET_KEY`
-   - `npx wrangler secret put SUPABASE_DB_URL`
-   - `npx wrangler secret put JWT_ISSUER`
-   - `npx wrangler secret put JWT_AUDIENCE`
-4. Deploy:
-   - `npx wrangler deploy`
-5. Verify:
-   - `https://<worker-subdomain>.workers.dev/health`
-
-### B) Phase 4 verification (already completed; rerun anytime)
+### A) Phase 4 verification (backend + minimal UI completed; rerun anytime)
 1. Ensure migration `0005` is present on DB (one-time):
   - Option 1 (script): `cd backend && node scripts/apply_migration_0005.mjs`
   - Option 2 (manual): run `backend/migrations/0005_phase4_estimate_billing_lock.sql` in Supabase SQL Editor
-2. Start local API:
-  - `cd backend && npm run dev`
-3. Run live smoke script:
+2. Run smoke script against local API:
   - `cd backend && ./scripts/smoke_phase4_live.ps1`
+3. Run equivalent smoke against deployed Worker URL (manual/invoke-rest method):
+  - `https://workshop-api.jaiswal-utkarshuj.workers.dev`
 4. Expected terminal summary:
   - `smoke = PHASE4_OK`
   - `finalize_state = FINALIZED`
@@ -219,10 +254,10 @@
   - `override_count >= 1`
   - non-empty `credit_note_no`
 
-### C) Next build milestone after Phase 4 backend validation
+### B) Next build milestone after Phase 4 backend validation
 - Continue Phase 5 (inventory + strict case-linked spare consumption controls).
 
-### D) Exact Runbook: Phase 4 live smoke (create -> approve -> finalize -> override -> credit-note)
+### C) Exact Runbook: Phase 4 live smoke (create -> approve -> finalize -> override -> credit-note)
 1. Start local backend API:
   - `cd backend`
   - `npm run dev`
@@ -263,10 +298,9 @@
 
 ## 7) Quick Resume Checklist for Next Agent
 1. Read this file first.
-2. Verify `.env` and `backend/.env` values are current after secret rotation.
-3. Run local API: `cd backend && npm run dev`.
-4. Hit `http://127.0.0.1:8788/health`.
-5. Ensure migration `0005` is active (`cd backend && node scripts/apply_migration_0005.mjs`).
-6. Run `cd backend && ./scripts/smoke_phase4_live.ps1` and confirm `PHASE4_OK`.
-7. Continue with Phase 5 backend (inventory + case-linked consumption).
+2. Verify deployed Worker health: `https://workshop-api.jaiswal-utkarshuj.workers.dev/health`.
+3. Verify `.env` and `backend/.env` values are current after secret rotation.
+4. Ensure migration `0005` is active (`cd backend && node scripts/apply_migration_0005.mjs`).
+5. Re-run local smoke as needed: `cd backend && ./scripts/smoke_phase4_live.ps1`.
+6. Continue with Phase 5 backend (inventory + case-linked consumption).
 

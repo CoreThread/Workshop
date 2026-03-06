@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Workshop Phase 2-3 UI</title>
+  <title>Workshop Phase 2-4 UI</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
   <main class="container">
-    <h1>Workshop - Phase 2/3</h1>
-    <p class="subtitle">Case + Follow-up + Daily Close</p>
+    <h1>Workshop - Phase 2/4</h1>
+    <p class="subtitle">Case + Follow-up + Daily Close + Billing Ops</p>
 
     <section class="card">
       <h2>Connection</h2>
@@ -109,6 +109,89 @@
       <button id="runDailyCloseBtn">Run Daily Close</button>
       <button id="loadDailyCloseBtn" class="ghost">Load Latest Daily Close</button>
       <pre id="dailyCloseResult"></pre>
+    </section>
+
+    <section class="card">
+      <h2>Estimate + Billing (Phase 4)</h2>
+
+      <label>Case ID</label>
+      <input id="estimateCaseId" placeholder="case_id" />
+      <label>Case Item ID</label>
+      <input id="estimateItemId" placeholder="case_item_id" />
+
+      <label>Labor (paise)</label>
+      <input id="laborPaise" value="12000" />
+      <label>Spare (paise)</label>
+      <input id="sparePaise" value="8000" />
+      <label>Other (paise)</label>
+      <input id="otherPaise" value="1000" />
+      <label>Discount (paise)</label>
+      <input id="discountPaise" value="500" />
+      <label>GST Required</label>
+      <select id="gstRequired">
+        <option value="true" selected>true</option>
+        <option value="false">false</option>
+      </select>
+      <label>Send For Decision</label>
+      <select id="sendForDecision">
+        <option value="true" selected>true</option>
+        <option value="false">false</option>
+      </select>
+      <button id="createEstimateBtn">Create Estimate</button>
+
+      <label>Estimate ID</label>
+      <input id="estimateId" placeholder="estimate_id" />
+      <div class="row">
+        <button id="getEstimateBtn" class="ghost">Get Estimate</button>
+        <button id="listCaseEstimatesBtn" class="ghost">List Case Estimates</button>
+      </div>
+
+      <label>Decision</label>
+      <select id="estimateDecision">
+        <option>Approved</option>
+        <option>Rejected</option>
+        <option>Pending</option>
+      </select>
+      <label>Decision By Name</label>
+      <input id="decisionByName" value="Ramesh" />
+      <label>Decision By Phone</label>
+      <input id="decisionByPhone" value="9876500011" />
+      <label>Decision Channel</label>
+      <select id="decisionChannel">
+        <option>call</option>
+        <option>in_person</option>
+        <option>whatsapp</option>
+        <option>sms</option>
+      </select>
+      <label>Consent Template Version</label>
+      <input id="consentTemplateVersion" value="estimate-v1" />
+      <label>Consent Text Snapshot</label>
+      <input id="consentTextSnapshot" value="Approved on call" />
+      <button id="setEstimateDecisionBtn">Set Estimate Decision</button>
+
+      <label>Finalize Reason</label>
+      <input id="finalizeReason" value="Finalize from UI" />
+      <button id="finalizeEstimateBtn">Finalize Estimate</button>
+
+      <label>Override Reason</label>
+      <input id="overrideReason" value="UI override after finalize" />
+      <label>Override Labor (paise)</label>
+      <input id="overrideLaborPaise" value="13000" />
+      <label>Override Spare (paise)</label>
+      <input id="overrideSparePaise" value="8000" />
+      <label>Override Other (paise)</label>
+      <input id="overrideOtherPaise" value="1000" />
+      <label>Override Discount (paise)</label>
+      <input id="overrideDiscountPaise" value="500" />
+      <button id="overrideEstimateBtn">Override Finalized Estimate</button>
+
+      <label>Credit Note Amount (paise)</label>
+      <input id="creditAmountPaise" value="3000" />
+      <label>Credit Note Reason</label>
+      <input id="creditReason" value="Minor billing correction" />
+      <button id="createCreditNoteBtn">Create Credit Note</button>
+
+      <pre id="phase4Result"></pre>
     </section>
   </main>
 

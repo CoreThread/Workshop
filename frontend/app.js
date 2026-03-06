@@ -1,6 +1,6 @@
 const storage = {
   get apiBase() {
-    return localStorage.getItem("apiBase") || "http://127.0.0.1:8790";
+    return localStorage.getItem("apiBase") || "http://127.0.0.1:8788";
   },
   set apiBase(value) {
     localStorage.setItem("apiBase", value);
@@ -52,13 +52,58 @@ const el = {
   dailyCloseNote: document.getElementById("dailyCloseNote"),
   runDailyCloseBtn: document.getElementById("runDailyCloseBtn"),
   loadDailyCloseBtn: document.getElementById("loadDailyCloseBtn"),
-  dailyCloseResult: document.getElementById("dailyCloseResult")
+  dailyCloseResult: document.getElementById("dailyCloseResult"),
+  estimateCaseId: document.getElementById("estimateCaseId"),
+  estimateItemId: document.getElementById("estimateItemId"),
+  laborPaise: document.getElementById("laborPaise"),
+  sparePaise: document.getElementById("sparePaise"),
+  otherPaise: document.getElementById("otherPaise"),
+  discountPaise: document.getElementById("discountPaise"),
+  gstRequired: document.getElementById("gstRequired"),
+  sendForDecision: document.getElementById("sendForDecision"),
+  createEstimateBtn: document.getElementById("createEstimateBtn"),
+  estimateId: document.getElementById("estimateId"),
+  getEstimateBtn: document.getElementById("getEstimateBtn"),
+  listCaseEstimatesBtn: document.getElementById("listCaseEstimatesBtn"),
+  estimateDecision: document.getElementById("estimateDecision"),
+  decisionByName: document.getElementById("decisionByName"),
+  decisionByPhone: document.getElementById("decisionByPhone"),
+  decisionChannel: document.getElementById("decisionChannel"),
+  consentTemplateVersion: document.getElementById("consentTemplateVersion"),
+  consentTextSnapshot: document.getElementById("consentTextSnapshot"),
+  setEstimateDecisionBtn: document.getElementById("setEstimateDecisionBtn"),
+  finalizeReason: document.getElementById("finalizeReason"),
+  finalizeEstimateBtn: document.getElementById("finalizeEstimateBtn"),
+  overrideReason: document.getElementById("overrideReason"),
+  overrideLaborPaise: document.getElementById("overrideLaborPaise"),
+  overrideSparePaise: document.getElementById("overrideSparePaise"),
+  overrideOtherPaise: document.getElementById("overrideOtherPaise"),
+  overrideDiscountPaise: document.getElementById("overrideDiscountPaise"),
+  overrideEstimateBtn: document.getElementById("overrideEstimateBtn"),
+  creditAmountPaise: document.getElementById("creditAmountPaise"),
+  creditReason: document.getElementById("creditReason"),
+  createCreditNoteBtn: document.getElementById("createCreditNoteBtn"),
+  phase4Result: document.getElementById("phase4Result")
 };
 
 el.apiBase.value = storage.apiBase;
 
 function setText(node, text) {
   node.textContent = text;
+}
+
+function toBool(value) {
+  return String(value).toLowerCase() === "true";
+}
+
+function toIntOrZero(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.trunc(parsed);
+}
+
+function setPhase4Result(payload) {
+  el.phase4Result.textContent = JSON.stringify(payload, null, 2);
 }
 
 async function api(path, options = {}) {
@@ -141,6 +186,8 @@ el.createCaseBtn.addEventListener("click", async () => {
     setText(el.createResult, `Created: case_id=${result.data.case_id}, item_id=${result.data.case_item_id}`);
     el.statusCaseId.value = result.data.case_id;
     el.statusItemId.value = result.data.case_item_id;
+    el.estimateCaseId.value = result.data.case_id;
+    el.estimateItemId.value = result.data.case_item_id;
   } catch (error) {
     setText(el.createResult, `Create failed: ${error.message}`);
   }
@@ -274,6 +321,155 @@ el.loadDailyCloseBtn.addEventListener("click", async () => {
     el.dailyCloseResult.textContent = JSON.stringify(result.data, null, 2);
   } catch (error) {
     el.dailyCloseResult.textContent = `Load latest close failed: ${error.message}`;
+  }
+});
+
+el.createEstimateBtn.addEventListener("click", async () => {
+  try {
+    const payload = {
+      case_id: el.estimateCaseId.value.trim(),
+      case_item_id: el.estimateItemId.value.trim(),
+      labor_amount_paise: toIntOrZero(el.laborPaise.value),
+      spare_amount_paise: toIntOrZero(el.sparePaise.value),
+      other_amount_paise: toIntOrZero(el.otherPaise.value),
+      discount_amount_paise: toIntOrZero(el.discountPaise.value),
+      gst_required: toBool(el.gstRequired.value),
+      send_for_decision: toBool(el.sendForDecision.value)
+    };
+
+    const result = await api("/v1/estimates", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+
+    el.estimateId.value = result.data.id;
+    setPhase4Result({ action: "create_estimate", ...result });
+  } catch (error) {
+    setPhase4Result({ action: "create_estimate", error: error.message });
+  }
+});
+
+el.getEstimateBtn.addEventListener("click", async () => {
+  try {
+    const estimateId = el.estimateId.value.trim();
+    if (!estimateId) {
+      setPhase4Result({ action: "get_estimate", error: "Provide estimate_id" });
+      return;
+    }
+    const result = await api(`/v1/estimates/${estimateId}`, { method: "GET" });
+    setPhase4Result({ action: "get_estimate", ...result });
+  } catch (error) {
+    setPhase4Result({ action: "get_estimate", error: error.message });
+  }
+});
+
+el.listCaseEstimatesBtn.addEventListener("click", async () => {
+  try {
+    const caseId = el.estimateCaseId.value.trim();
+    if (!caseId) {
+      setPhase4Result({ action: "list_case_estimates", error: "Provide case_id" });
+      return;
+    }
+    const result = await api(`/v1/cases/${caseId}/estimates`, { method: "GET" });
+    setPhase4Result({ action: "list_case_estimates", ...result });
+  } catch (error) {
+    setPhase4Result({ action: "list_case_estimates", error: error.message });
+  }
+});
+
+el.setEstimateDecisionBtn.addEventListener("click", async () => {
+  try {
+    const estimateId = el.estimateId.value.trim();
+    if (!estimateId) {
+      setPhase4Result({ action: "set_estimate_decision", error: "Provide estimate_id" });
+      return;
+    }
+
+    const result = await api(`/v1/estimates/${estimateId}/decision`, {
+      method: "POST",
+      body: JSON.stringify({
+        decision: el.estimateDecision.value,
+        decision_by_name: el.decisionByName.value.trim(),
+        decision_by_phone: el.decisionByPhone.value.trim(),
+        decision_channel: el.decisionChannel.value,
+        consent_template_version_id: el.consentTemplateVersion.value.trim(),
+        consent_text_snapshot: el.consentTextSnapshot.value.trim()
+      })
+    });
+
+    setPhase4Result({ action: "set_estimate_decision", ...result });
+  } catch (error) {
+    setPhase4Result({ action: "set_estimate_decision", error: error.message });
+  }
+});
+
+el.finalizeEstimateBtn.addEventListener("click", async () => {
+  try {
+    const estimateId = el.estimateId.value.trim();
+    if (!estimateId) {
+      setPhase4Result({ action: "finalize_estimate", error: "Provide estimate_id" });
+      return;
+    }
+
+    const result = await api(`/v1/billing/estimates/${estimateId}/finalize`, {
+      method: "POST",
+      body: JSON.stringify({ reason: el.finalizeReason.value.trim() || "Finalize from UI" })
+    });
+
+    setPhase4Result({ action: "finalize_estimate", ...result });
+  } catch (error) {
+    setPhase4Result({ action: "finalize_estimate", error: error.message });
+  }
+});
+
+el.overrideEstimateBtn.addEventListener("click", async () => {
+  try {
+    const estimateId = el.estimateId.value.trim();
+    if (!estimateId) {
+      setPhase4Result({ action: "override_estimate", error: "Provide estimate_id" });
+      return;
+    }
+
+    const result = await api(`/v1/billing/estimates/${estimateId}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        labor_amount_paise: toIntOrZero(el.overrideLaborPaise.value),
+        spare_amount_paise: toIntOrZero(el.overrideSparePaise.value),
+        other_amount_paise: toIntOrZero(el.overrideOtherPaise.value),
+        discount_amount_paise: toIntOrZero(el.overrideDiscountPaise.value),
+        gst_required: toBool(el.gstRequired.value),
+        override_reason: el.overrideReason.value.trim()
+      })
+    });
+
+    setPhase4Result({ action: "override_estimate", ...result });
+  } catch (error) {
+    setPhase4Result({ action: "override_estimate", error: error.message });
+  }
+});
+
+el.createCreditNoteBtn.addEventListener("click", async () => {
+  try {
+    const estimateId = el.estimateId.value.trim();
+    if (!estimateId) {
+      setPhase4Result({ action: "create_credit_note", error: "Provide estimate_id" });
+      return;
+    }
+
+    const result = await api(`/v1/billing/estimates/${estimateId}/credit-note`, {
+      method: "POST",
+      body: JSON.stringify({
+        credit_amount_paise: toIntOrZero(el.creditAmountPaise.value),
+        reason: el.creditReason.value.trim(),
+        metadata_json: {
+          source: "phase4-ui"
+        }
+      })
+    });
+
+    setPhase4Result({ action: "create_credit_note", ...result });
+  } catch (error) {
+    setPhase4Result({ action: "create_credit_note", error: error.message });
   }
 });
 

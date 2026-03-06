@@ -9,7 +9,7 @@
     "check": "wrangler types"
   },
   "devDependencies": {
-    "wrangler": "^4.6.0"
+    "wrangler": "^4.71.0"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",
