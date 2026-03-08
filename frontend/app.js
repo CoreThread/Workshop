@@ -65,6 +65,7 @@ const el = {
   estimateId: document.getElementById("estimateId"),
   getEstimateBtn: document.getElementById("getEstimateBtn"),
   listCaseEstimatesBtn: document.getElementById("listCaseEstimatesBtn"),
+  loadLatestEstimateBtn: document.getElementById("loadLatestEstimateBtn"),
   estimateDecision: document.getElementById("estimateDecision"),
   decisionByName: document.getElementById("decisionByName"),
   decisionByPhone: document.getElementById("decisionByPhone"),
@@ -83,10 +84,83 @@ const el = {
   creditAmountPaise: document.getElementById("creditAmountPaise"),
   creditReason: document.getElementById("creditReason"),
   createCreditNoteBtn: document.getElementById("createCreditNoteBtn"),
-  phase4Result: document.getElementById("phase4Result")
+  phase4Result: document.getElementById("phase4Result"),
+  syncContextBtn: document.getElementById("syncContextBtn"),
+  estimatePreview: document.getElementById("estimatePreview"),
+  phase4Highlights: document.getElementById("phase4Highlights"),
+  invoiceStateChip: document.getElementById("invoiceStateChip"),
+  lockedChip: document.getElementById("lockedChip"),
+  overrideChip: document.getElementById("overrideChip"),
+  decisionChip: document.getElementById("decisionChip"),
+  confirmFinalize: document.getElementById("confirmFinalize"),
+  confirmOverride: document.getElementById("confirmOverride"),
+  confirmCreditNote: document.getElementById("confirmCreditNote"),
+  phase5CaseId: document.getElementById("phase5CaseId"),
+  phase5CaseItemId: document.getElementById("phase5CaseItemId"),
+  phase5InventoryItemId: document.getElementById("phase5InventoryItemId"),
+  phase5SyncCaseBtn: document.getElementById("phase5SyncCaseBtn"),
+  inventorySku: document.getElementById("inventorySku"),
+  inventoryName: document.getElementById("inventoryName"),
+  inventoryUom: document.getElementById("inventoryUom"),
+  inventoryStockQty: document.getElementById("inventoryStockQty"),
+  inventoryReorderQty: document.getElementById("inventoryReorderQty"),
+  inventoryUnitCostPaise: document.getElementById("inventoryUnitCostPaise"),
+  inventoryValuation: document.getElementById("inventoryValuation"),
+  createInventoryBtn: document.getElementById("createInventoryBtn"),
+  inventoryCreateResult: document.getElementById("inventoryCreateResult"),
+  inventoryQuery: document.getElementById("inventoryQuery"),
+  inventoryLowStockOnly: document.getElementById("inventoryLowStockOnly"),
+  loadInventoryBtn: document.getElementById("loadInventoryBtn"),
+  inventoryList: document.getElementById("inventoryList"),
+  consumeQty: document.getElementById("consumeQty"),
+  consumeUom: document.getElementById("consumeUom"),
+  consumeUnitCostPaise: document.getElementById("consumeUnitCostPaise"),
+  consumeLineCostPaise: document.getElementById("consumeLineCostPaise"),
+  consumeNotes: document.getElementById("consumeNotes"),
+  consumeOnCaseBtn: document.getElementById("consumeOnCaseBtn"),
+  loadCaseConsumptionBtn: document.getElementById("loadCaseConsumptionBtn"),
+  verifyLedgerBtn: document.getElementById("verifyLedgerBtn"),
+  phase5Result: document.getElementById("phase5Result"),
+  phase5LedgerResult: document.getElementById("phase5LedgerResult"),
+  phase5StockWarning: document.getElementById("phase5StockWarning"),
+  correctionConsumptionId: document.getElementById("correctionConsumptionId"),
+  correctionQty: document.getElementById("correctionQty"),
+  correctionType: document.getElementById("correctionType"),
+  correctionReason: document.getElementById("correctionReason"),
+  prepareCorrectionNoteBtn: document.getElementById("prepareCorrectionNoteBtn"),
+  verifyCorrectionRefBtn: document.getElementById("verifyCorrectionRefBtn"),
+  phase5CorrectionResult: document.getElementById("phase5CorrectionResult"),
+  runPhase5SmokePayloadBtn: document.getElementById("runPhase5SmokePayloadBtn"),
+  phase5SmokePayloadResult: document.getElementById("phase5SmokePayloadResult"),
+  expenseDateLocal: document.getElementById("expenseDateLocal"),
+  expenseCategory: document.getElementById("expenseCategory"),
+  expenseAmountPaise: document.getElementById("expenseAmountPaise"),
+  expensePaymentMode: document.getElementById("expensePaymentMode"),
+  expenseNote: document.getElementById("expenseNote"),
+  createExpenseBtn: document.getElementById("createExpenseBtn"),
+  loadExpensesBtn: document.getElementById("loadExpensesBtn"),
+  billName: document.getElementById("billName"),
+  billCategory: document.getElementById("billCategory"),
+  billAmountPaise: document.getElementById("billAmountPaise"),
+  billDueDate: document.getElementById("billDueDate"),
+  billFrequencyDays: document.getElementById("billFrequencyDays"),
+  billReminderOffsets: document.getElementById("billReminderOffsets"),
+  createBillBtn: document.getElementById("createBillBtn"),
+  loadBillsBtn: document.getElementById("loadBillsBtn"),
+  billId: document.getElementById("billId"),
+  billPayAmountPaise: document.getElementById("billPayAmountPaise"),
+  billPayMode: document.getElementById("billPayMode"),
+  billPayNote: document.getElementById("billPayNote"),
+  payBillBtn: document.getElementById("payBillBtn"),
+  phase6Result: document.getElementById("phase6Result")
 };
 
 el.apiBase.value = storage.apiBase;
+
+const phase5State = {
+  lastConsumptionId: "",
+  selectedInventory: null
+};
 
 function setText(node, text) {
   node.textContent = text;
@@ -102,8 +176,203 @@ function toIntOrZero(value) {
   return Math.trunc(parsed);
 }
 
+function toNumberOrNull(value) {
+  if (value === undefined || value === null || String(value).trim() === "") return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  return parsed;
+}
+
+function toDateLocalString(date = new Date()) {
+  return date.toISOString().slice(0, 10);
+}
+
+function toStampCompact(date = new Date()) {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  const hh = String(date.getHours()).padStart(2, "0");
+  const mi = String(date.getMinutes()).padStart(2, "0");
+  const ss = String(date.getSeconds()).padStart(2, "0");
+  return `${yyyy}${mm}${dd}${hh}${mi}${ss}`;
+}
+
+function parseCsvInts(value, fallback = [7, 3, 0]) {
+  const raw = String(value || "").split(",").map((x) => x.trim()).filter(Boolean);
+  if (!raw.length) return fallback;
+  const parsed = raw
+    .map((x) => Number(x))
+    .filter((x) => Number.isFinite(x) && Number.isInteger(x) && x >= 0);
+  return parsed.length ? Array.from(new Set(parsed)) : fallback;
+}
+
+function paiseToRupees(paise) {
+  return (paise / 100).toFixed(2);
+}
+
+function computePreview() {
+  const labor = Math.max(0, toIntOrZero(el.laborPaise.value));
+  const spare = Math.max(0, toIntOrZero(el.sparePaise.value));
+  const other = Math.max(0, toIntOrZero(el.otherPaise.value));
+  const discount = Math.max(0, toIntOrZero(el.discountPaise.value));
+  const gstRequired = toBool(el.gstRequired.value);
+  const base = Math.max(0, labor + spare + other - discount);
+  const gstRateBps = gstRequired ? 1800 : 0;
+  const gst = Math.max(0, Math.round((base * gstRateBps) / 10000));
+  const total = base + gst;
+
+  el.estimatePreview.textContent = [
+    `BASE_BILL_PAISE: ${base} (Rs ${paiseToRupees(base)})`,
+    `GST_RATE_BPS: ${gstRateBps}`,
+    `GST_AMOUNT_PAISE: ${gst} (Rs ${paiseToRupees(gst)})`,
+    `INVOICE_TOTAL_PAISE: ${total} (Rs ${paiseToRupees(total)})`
+  ].join("\n");
+}
+
 function setPhase4Result(payload) {
   el.phase4Result.textContent = JSON.stringify(payload, null, 2);
+}
+
+async function refreshEstimateSnapshotSilently(actionTag = "refresh_estimate") {
+  const estimateId = el.estimateId.value.trim();
+  if (!estimateId) return;
+  try {
+    const snapshot = await api(`/v1/estimates/${estimateId}`, { method: "GET" });
+    setPhase4Highlights(actionTag, snapshot);
+  } catch {
+    // Keep the original action result visible when refresh fails.
+  }
+}
+
+function updatePhase4Chips(data = {}) {
+  el.invoiceStateChip.textContent = data.invoice_state || data.invoiceState || "NA";
+  const lockValue = data.is_financial_locked;
+  el.lockedChip.textContent = lockValue === undefined ? "NA" : String(Boolean(lockValue));
+  el.overrideChip.textContent = String(data.override_count ?? 0);
+  el.decisionChip.textContent = data.decision || "NA";
+}
+
+function setPhase4Highlights(action, payload = {}) {
+  const data = payload.data || {};
+  const lines = [
+    `action: ${action}`,
+    `code: ${payload.code || "UNKNOWN"}`,
+    `estimate_id: ${data.id || el.estimateId.value.trim() || "NA"}`,
+    `decision: ${data.decision || "NA"}`,
+    `invoice_state: ${data.invoice_state || "NA"}`,
+    `locked: ${data.is_financial_locked === undefined ? "NA" : String(Boolean(data.is_financial_locked))}`,
+    `override_count: ${data.override_count ?? "NA"}`,
+    `invoice_total_paise: ${data.invoice_total_paise ?? "NA"}`,
+    `last_override_reason: ${data.last_override_reason || "NA"}`
+  ];
+
+  el.phase4Highlights.textContent = lines.join("\n");
+  updatePhase4Chips(data);
+}
+
+function ensurePhase4Confirm(checkbox, message, action) {
+  if (!checkbox?.checked) {
+    setPhase4Result({ action, error: message });
+    return false;
+  }
+  return true;
+}
+
+function syncPhase4ContextFromCase() {
+  if (el.statusCaseId.value.trim()) {
+    el.estimateCaseId.value = el.statusCaseId.value.trim();
+  }
+  if (el.statusItemId.value.trim()) {
+    el.estimateItemId.value = el.statusItemId.value.trim();
+  }
+}
+
+function syncPhase5ContextFromCase() {
+  if (el.statusCaseId.value.trim()) {
+    el.phase5CaseId.value = el.statusCaseId.value.trim();
+  }
+  if (el.statusItemId.value.trim()) {
+    el.phase5CaseItemId.value = el.statusItemId.value.trim();
+  }
+}
+
+function syncOperationalContextFromCase() {
+  syncPhase4ContextFromCase();
+  syncPhase5ContextFromCase();
+}
+
+function setPhase5Result(payload) {
+  el.phase5Result.textContent = JSON.stringify(payload, null, 2);
+}
+
+function setPhase5LedgerResult(payload) {
+  el.phase5LedgerResult.textContent = JSON.stringify(payload, null, 2);
+}
+
+function setPhase5CorrectionResult(payload) {
+  el.phase5CorrectionResult.textContent = JSON.stringify(payload, null, 2);
+}
+
+function setPhase5SmokePayloadResult(payload) {
+  if (!el.phase5SmokePayloadResult) return;
+  el.phase5SmokePayloadResult.textContent = JSON.stringify(payload, null, 2);
+}
+
+function setPhase6Result(payload) {
+  if (!el.phase6Result) return;
+  el.phase6Result.textContent = JSON.stringify(payload, null, 2);
+}
+
+function setPhase5StockWarning(message, tone = "") {
+  if (!el.phase5StockWarning) return;
+  el.phase5StockWarning.textContent = message || "";
+  el.phase5StockWarning.classList.remove("warn", "ok");
+  if (tone) el.phase5StockWarning.classList.add(tone);
+}
+
+function updatePhase5StockWarning() {
+  const inv = phase5State.selectedInventory;
+  if (!inv) {
+    setPhase5StockWarning("Select inventory item to preview stock guard checks.");
+    return;
+  }
+
+  const stock = Number(inv.current_stock_qty);
+  const reorder = Number(inv.reorder_level_qty);
+  const qty = Number(el.consumeQty.value || 0);
+  if (!Number.isFinite(stock) || !Number.isFinite(reorder) || !Number.isFinite(qty) || qty <= 0) {
+    setPhase5StockWarning("Enter a positive consume qty to run stock guard preview.");
+    return;
+  }
+
+  const projected = stock - qty;
+  if (projected < 0) {
+    setPhase5StockWarning(`Projected stock is negative (${projected}). Consumption may be blocked by DB policy.`, "warn");
+    return;
+  }
+
+  if (projected <= reorder) {
+    setPhase5StockWarning(`Projected stock after consume: ${projected}. This reaches low-stock threshold (${reorder}).`, "warn");
+    return;
+  }
+
+  setPhase5StockWarning(`Projected stock after consume: ${projected}. Within safe range.`, "ok");
+}
+
+function renderInventoryList(items = []) {
+  if (!items.length) {
+    el.inventoryList.innerHTML = "<p class='hint'>No inventory rows found</p>";
+    phase5State.selectedInventory = null;
+    updatePhase5StockWarning();
+    return;
+  }
+
+  el.inventoryList.innerHTML = items
+    .map((row) => {
+      const lowStock = Number(row.current_stock_qty) <= Number(row.reorder_level_qty);
+      return `<div class="case-item"><b>${row.item_name}</b><br/>sku: ${row.sku || "NA"}<br/>inventory_item_id: ${row.id}<br/>stock: ${row.current_stock_qty} ${row.uom || ""}<br/>reorder: ${row.reorder_level_qty}<br/>low_stock: ${String(lowStock)}<br/><button type="button" class="ghost use-inventory-btn" data-inventory-id="${row.id}" data-uom="${row.uom || ""}" data-stock="${row.current_stock_qty}" data-reorder="${row.reorder_level_qty}" data-item-name="${row.item_name}">Use for Consumption</button></div>`;
+    })
+    .join("");
 }
 
 async function api(path, options = {}) {
@@ -143,6 +412,88 @@ async function loadMe() {
 el.saveApiBase.addEventListener("click", () => {
   storage.apiBase = el.apiBase.value.trim();
   setText(el.whoami, `API base saved: ${storage.apiBase}`);
+});
+
+el.syncContextBtn?.addEventListener("click", () => {
+  syncOperationalContextFromCase();
+  setPhase4Result({ action: "sync_context", case_id: el.estimateCaseId.value.trim(), case_item_id: el.estimateItemId.value.trim() });
+});
+
+el.phase5SyncCaseBtn?.addEventListener("click", () => {
+  syncPhase5ContextFromCase();
+  setPhase5Result({
+    action: "sync_case_context",
+    case_id: el.phase5CaseId.value.trim(),
+    case_item_id: el.phase5CaseItemId.value.trim()
+  });
+});
+
+el.runPhase5SmokePayloadBtn?.addEventListener("click", () => {
+  const now = new Date();
+  const stamp = toStampCompact(now);
+  const randomPhone = `97${Math.floor(100000000 + Math.random() * 900000000)}`;
+
+  const generated = {
+    smoke: "PHASE5_UI_PAYLOAD_GENERATED",
+    generated_at_utc: now.toISOString(),
+    steps: [
+      "POST /v1/cases",
+      "POST /v1/cases/{case_id}/items/{item_id}/status -> Diagnosis, WaitingApproval, ApprovedForRepair",
+      "POST /v1/inventory/items",
+      "POST /v1/cases/{case_id}/consumption",
+      "GET /v1/inventory/ledger?ref_entity=case_consumption&ref_id={consumption_id}"
+    ],
+    payloads: {
+      create_case: {
+        case_no: `P5UI-GEN-${stamp}`,
+        customer: {
+          name: "Phase5 UI Smoke",
+          phone: randomPhone
+        },
+        item: {
+          item_category: "fan",
+          reported_issue: "Phase5 regression smoke flow"
+        }
+      },
+      create_inventory_item: {
+        sku: `P5UI-GEN-SKU-${stamp}`,
+        item_name: "Fan Capacitor 2.5uF Smoke",
+        uom: "pcs",
+        current_stock_qty: 40,
+        reorder_level_qty: 8,
+        default_unit_cost_paise: 1900,
+        valuation_method: "WEIGHTED_AVERAGE"
+      },
+      consume_on_case: {
+        case_item_id: "<from create_case response>",
+        inventory_item_id: "<from create_inventory_item response>",
+        qty: 4,
+        uom: "pcs",
+        unit_cost_paise_snapshot: 1900,
+        notes: `phase5 generated smoke ${stamp}`
+      }
+    }
+  };
+
+  el.caseNo.value = generated.payloads.create_case.case_no;
+  el.customerName.value = generated.payloads.create_case.customer.name;
+  el.customerPhone.value = generated.payloads.create_case.customer.phone;
+  el.itemCategory.value = generated.payloads.create_case.item.item_category;
+  el.reportedIssue.value = generated.payloads.create_case.item.reported_issue;
+
+  el.inventorySku.value = generated.payloads.create_inventory_item.sku;
+  el.inventoryName.value = generated.payloads.create_inventory_item.item_name;
+  el.inventoryUom.value = generated.payloads.create_inventory_item.uom;
+  el.inventoryStockQty.value = String(generated.payloads.create_inventory_item.current_stock_qty);
+  el.inventoryReorderQty.value = String(generated.payloads.create_inventory_item.reorder_level_qty);
+  el.inventoryUnitCostPaise.value = String(generated.payloads.create_inventory_item.default_unit_cost_paise);
+  el.consumeQty.value = String(generated.payloads.consume_on_case.qty);
+  el.consumeUom.value = generated.payloads.consume_on_case.uom;
+  el.consumeUnitCostPaise.value = String(generated.payloads.consume_on_case.unit_cost_paise_snapshot);
+  el.consumeNotes.value = generated.payloads.consume_on_case.notes;
+
+  setPhase5SmokePayloadResult(generated);
+  updatePhase5StockWarning();
 });
 
 el.loginBtn.addEventListener("click", async () => {
@@ -186,8 +537,7 @@ el.createCaseBtn.addEventListener("click", async () => {
     setText(el.createResult, `Created: case_id=${result.data.case_id}, item_id=${result.data.case_item_id}`);
     el.statusCaseId.value = result.data.case_id;
     el.statusItemId.value = result.data.case_item_id;
-    el.estimateCaseId.value = result.data.case_id;
-    el.estimateItemId.value = result.data.case_item_id;
+    syncOperationalContextFromCase();
   } catch (error) {
     setText(el.createResult, `Create failed: ${error.message}`);
   }
@@ -213,7 +563,7 @@ el.searchBtn.addEventListener("click", async () => {
         const customer = Array.isArray(customerRaw)
           ? (customerRaw[0] || {})
           : (customerRaw || {});
-        return `<div class="case-item"><b>${row.case_no}</b><br/>case_id: ${row.id}<br/>status: ${row.header_status}<br/>customer: ${customer.name || ""} (${customer.phone || ""})</div>`;
+        return `<div class="case-item"><b>${row.case_no}</b><br/>case_id: ${row.id}<br/>status: ${row.header_status}<br/>customer: ${customer.name || ""} (${customer.phone || ""})<br/><button type="button" class="ghost use-case-btn" data-case-id="${row.id}">Use in Status/Phase4</button></div>`;
       })
       .join("");
   } catch (error) {
@@ -233,8 +583,363 @@ el.updateStatusBtn.addEventListener("click", async () => {
       })
     });
     setText(el.statusResult, `Updated: ${result.data.from_status} -> ${result.data.to_status} | header=${result.data.header_status}`);
+    syncOperationalContextFromCase();
   } catch (error) {
     setText(el.statusResult, `Status update failed: ${error.message}`);
+  }
+});
+
+el.searchResults.addEventListener("click", (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+  if (!target.classList.contains("use-case-btn")) return;
+
+  const caseId = target.getAttribute("data-case-id") || "";
+  if (!caseId) return;
+
+  el.statusCaseId.value = caseId;
+  el.estimateCaseId.value = caseId;
+  el.phase5CaseId.value = caseId;
+  setText(el.statusResult, `Case selected: ${caseId}. Load item IDs from case detail flow if needed.`);
+});
+
+el.createInventoryBtn?.addEventListener("click", async () => {
+  try {
+    const payload = {
+      sku: el.inventorySku.value.trim() || null,
+      item_name: el.inventoryName.value.trim(),
+      uom: el.inventoryUom.value.trim() || "pcs",
+      current_stock_qty: toNumberOrNull(el.inventoryStockQty.value),
+      reorder_level_qty: toNumberOrNull(el.inventoryReorderQty.value),
+      default_unit_cost_paise: toIntOrZero(el.inventoryUnitCostPaise.value),
+      valuation_method: el.inventoryValuation.value
+    };
+
+    const result = await api("/v1/inventory/items", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+
+    if (result?.data?.id) {
+      el.phase5InventoryItemId.value = result.data.id;
+    }
+    setText(el.inventoryCreateResult, `Created inventory item: ${result?.data?.id || "NA"}`);
+    setPhase5Result({ action: "create_inventory_item", ...result });
+  } catch (error) {
+    setText(el.inventoryCreateResult, `Inventory create failed: ${error.message}`);
+    setPhase5Result({ action: "create_inventory_item", error: error.message });
+  }
+});
+
+el.loadInventoryBtn?.addEventListener("click", async () => {
+  try {
+    const params = new URLSearchParams();
+    const query = el.inventoryQuery.value.trim();
+    if (query) params.set("q", query);
+    params.set("low_stock_only", String(toBool(el.inventoryLowStockOnly.value)));
+    params.set("limit", "20");
+
+    const result = await api(`/v1/inventory/items?${params.toString()}`, { method: "GET" });
+    renderInventoryList(result.data || []);
+    if (!el.phase5InventoryItemId.value.trim() && result.data?.[0]?.id) {
+      el.phase5InventoryItemId.value = result.data[0].id;
+    }
+    if (result.data?.[0]) {
+      phase5State.selectedInventory = result.data[0];
+      updatePhase5StockWarning();
+    }
+    setPhase5Result({ action: "list_inventory_items", ...result });
+  } catch (error) {
+    el.inventoryList.innerHTML = `<p class='hint'>Inventory load failed: ${error.message}</p>`;
+    setPhase5StockWarning("Unable to evaluate stock warning because inventory list load failed.", "warn");
+    setPhase5Result({ action: "list_inventory_items", error: error.message });
+  }
+});
+
+el.inventoryList?.addEventListener("click", (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+  if (!target.classList.contains("use-inventory-btn")) return;
+
+  const inventoryId = target.getAttribute("data-inventory-id") || "";
+  const uom = target.getAttribute("data-uom") || "";
+  const stock = Number(target.getAttribute("data-stock") || "NaN");
+  const reorder = Number(target.getAttribute("data-reorder") || "NaN");
+  const itemName = target.getAttribute("data-item-name") || "";
+  if (!inventoryId) return;
+
+  el.phase5InventoryItemId.value = inventoryId;
+  phase5State.selectedInventory = {
+    id: inventoryId,
+    item_name: itemName,
+    current_stock_qty: stock,
+    reorder_level_qty: reorder,
+    uom
+  };
+  if (!el.consumeUom.value.trim() && uom) {
+    el.consumeUom.value = uom;
+  }
+  updatePhase5StockWarning();
+  setPhase5Result({ action: "select_inventory_item", inventory_item_id: inventoryId, uom });
+});
+
+el.consumeQty?.addEventListener("input", () => {
+  updatePhase5StockWarning();
+});
+
+el.consumeOnCaseBtn?.addEventListener("click", async () => {
+  try {
+    const caseId = el.phase5CaseId.value.trim();
+    const caseItemId = el.phase5CaseItemId.value.trim();
+    const inventoryItemId = el.phase5InventoryItemId.value.trim();
+    const qty = toNumberOrNull(el.consumeQty.value);
+
+    if (!caseId || !caseItemId || !inventoryItemId) {
+      setPhase5Result({ action: "consume_on_case", error: "case_id, case_item_id, and inventory_item_id are required" });
+      return;
+    }
+    if (qty === null || qty <= 0) {
+      setPhase5Result({ action: "consume_on_case", error: "qty must be a positive number" });
+      return;
+    }
+
+    const unitCost = toNumberOrNull(el.consumeUnitCostPaise.value);
+    const lineCost = toNumberOrNull(el.consumeLineCostPaise.value);
+    const payload = {
+      case_item_id: caseItemId,
+      inventory_item_id: inventoryItemId,
+      qty,
+      uom: el.consumeUom.value.trim() || undefined,
+      unit_cost_paise_snapshot: unitCost === null ? undefined : Math.trunc(unitCost),
+      line_cost_paise: lineCost === null ? undefined : Math.trunc(lineCost),
+      notes: el.consumeNotes.value.trim() || undefined
+    };
+
+    const result = await api(`/v1/cases/${caseId}/consumption`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+
+    const createdConsumptionId = result?.data?.consumption?.id || "";
+    if (createdConsumptionId) {
+      phase5State.lastConsumptionId = createdConsumptionId;
+    }
+
+    setPhase5Result({
+      action: "consume_on_case",
+      last_consumption_id: phase5State.lastConsumptionId || null,
+      ...result
+    });
+  } catch (error) {
+    setPhase5Result({ action: "consume_on_case", error: error.message });
+  }
+});
+
+el.loadCaseConsumptionBtn?.addEventListener("click", async () => {
+  try {
+    const caseId = el.phase5CaseId.value.trim();
+    if (!caseId) {
+      setPhase5Result({ action: "load_case_consumption", error: "Provide case_id" });
+      return;
+    }
+
+    const params = new URLSearchParams();
+    if (el.phase5CaseItemId.value.trim()) params.set("case_item_id", el.phase5CaseItemId.value.trim());
+    params.set("limit", "20");
+
+    const result = await api(`/v1/cases/${caseId}/consumption?${params.toString()}`, { method: "GET" });
+    if (result.data?.[0]?.id) {
+      phase5State.lastConsumptionId = result.data[0].id;
+    }
+    setPhase5Result({
+      action: "load_case_consumption",
+      last_consumption_id: phase5State.lastConsumptionId || null,
+      ...result
+    });
+  } catch (error) {
+    setPhase5Result({ action: "load_case_consumption", error: error.message });
+  }
+});
+
+el.verifyLedgerBtn?.addEventListener("click", async () => {
+  try {
+    const params = new URLSearchParams();
+    params.set("ref_entity", "case_consumption");
+    params.set("limit", "20");
+
+    const inventoryItemId = el.phase5InventoryItemId.value.trim();
+    if (inventoryItemId) params.set("inventory_item_id", inventoryItemId);
+    if (phase5State.lastConsumptionId) params.set("ref_id", phase5State.lastConsumptionId);
+
+    if (!inventoryItemId && !phase5State.lastConsumptionId) {
+      setPhase5LedgerResult({ action: "verify_ledger", error: "Select inventory item or create/load consumption first" });
+      return;
+    }
+
+    const result = await api(`/v1/inventory/ledger?${params.toString()}`, { method: "GET" });
+    const rows = result.data || [];
+    const ledgerMatch = phase5State.lastConsumptionId
+      ? rows.some((row) => row.ref_id === phase5State.lastConsumptionId)
+      : rows.length > 0;
+
+    setPhase5LedgerResult({
+      action: "verify_ledger",
+      ref_entity: "case_consumption",
+      checked_ref_id: phase5State.lastConsumptionId || null,
+      ledger_match_found: ledgerMatch,
+      ledger_rows: rows
+    });
+  } catch (error) {
+    setPhase5LedgerResult({ action: "verify_ledger", error: error.message });
+  }
+});
+
+el.prepareCorrectionNoteBtn?.addEventListener("click", () => {
+  const originalConsumptionId = el.correctionConsumptionId.value.trim() || phase5State.lastConsumptionId;
+  const correctionQty = Number(el.correctionQty.value || 0);
+  const correctionType = el.correctionType.value;
+  const reason = el.correctionReason.value.trim();
+
+  if (!originalConsumptionId) {
+    setPhase5CorrectionResult({ action: "prepare_correction_note", error: "Provide original consumption_id or load case consumption first" });
+    return;
+  }
+  if (!Number.isFinite(correctionQty) || correctionQty <= 0) {
+    setPhase5CorrectionResult({ action: "prepare_correction_note", error: "correction qty must be positive" });
+    return;
+  }
+  if (!reason) {
+    setPhase5CorrectionResult({ action: "prepare_correction_note", error: "correction reason is required" });
+    return;
+  }
+
+  const structuredNote = `CORRECTION_REQUEST type=${correctionType}; original_consumption_id=${originalConsumptionId}; correction_qty=${correctionQty}; reason=${reason}`;
+  const existingNote = el.consumeNotes.value.trim();
+  el.consumeNotes.value = existingNote ? `${existingNote} | ${structuredNote}` : structuredNote;
+
+  setPhase5CorrectionResult({
+    action: "prepare_correction_note",
+    status: "READY",
+    correction_type: correctionType,
+    original_consumption_id: originalConsumptionId,
+    correction_qty: correctionQty,
+    next_step: "Use approved backend/admin reversal-correction path and keep this note in audit trail",
+    note_preview: structuredNote
+  });
+});
+
+el.verifyCorrectionRefBtn?.addEventListener("click", async () => {
+  try {
+    const originalConsumptionId = el.correctionConsumptionId.value.trim() || phase5State.lastConsumptionId;
+    if (!originalConsumptionId) {
+      setPhase5CorrectionResult({ action: "verify_correction_ref", error: "Provide original consumption_id" });
+      return;
+    }
+
+    const params = new URLSearchParams();
+    params.set("ref_entity", "case_consumption");
+    params.set("ref_id", originalConsumptionId);
+    params.set("limit", "10");
+
+    const result = await api(`/v1/inventory/ledger?${params.toString()}`, { method: "GET" });
+    const rows = result.data || [];
+    setPhase5CorrectionResult({
+      action: "verify_correction_ref",
+      original_consumption_id: originalConsumptionId,
+      ledger_ref_found: rows.length > 0,
+      ledger_rows: rows
+    });
+  } catch (error) {
+    setPhase5CorrectionResult({ action: "verify_correction_ref", error: error.message });
+  }
+});
+
+el.createExpenseBtn?.addEventListener("click", async () => {
+  try {
+    const payload = {
+      expense_date_local: el.expenseDateLocal.value.trim() || undefined,
+      category: el.expenseCategory.value.trim(),
+      amount_paise: toIntOrZero(el.expenseAmountPaise.value),
+      payment_mode: el.expensePaymentMode.value.trim() || undefined,
+      note: el.expenseNote.value.trim() || undefined
+    };
+    const result = await api("/v1/expenses", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    setPhase6Result({ action: "create_expense", ...result });
+  } catch (error) {
+    setPhase6Result({ action: "create_expense", error: error.message });
+  }
+});
+
+el.loadExpensesBtn?.addEventListener("click", async () => {
+  try {
+    const params = new URLSearchParams();
+    if (el.expenseCategory.value.trim()) params.set("category", el.expenseCategory.value.trim());
+    params.set("limit", "20");
+    const result = await api(`/v1/expenses?${params.toString()}`, { method: "GET" });
+    setPhase6Result({ action: "load_expenses", ...result });
+  } catch (error) {
+    setPhase6Result({ action: "load_expenses", error: error.message });
+  }
+});
+
+el.createBillBtn?.addEventListener("click", async () => {
+  try {
+    const payload = {
+      bill_name: el.billName.value.trim(),
+      category: el.billCategory.value.trim() || undefined,
+      amount_paise: toIntOrZero(el.billAmountPaise.value),
+      due_date: el.billDueDate.value.trim() || toDateLocalString(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
+      frequency_days: Math.max(1, toIntOrZero(el.billFrequencyDays.value || "30")),
+      reminder_offsets: parseCsvInts(el.billReminderOffsets.value)
+    };
+    const result = await api("/v1/recurring-bills", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    if (result?.data?.id) el.billId.value = result.data.id;
+    setPhase6Result({ action: "create_recurring_bill", ...result });
+  } catch (error) {
+    setPhase6Result({ action: "create_recurring_bill", error: error.message });
+  }
+});
+
+el.loadBillsBtn?.addEventListener("click", async () => {
+  try {
+    const result = await api("/v1/recurring-bills?limit=20", { method: "GET" });
+    if (!el.billId.value.trim() && result.data?.[0]?.id) {
+      el.billId.value = result.data[0].id;
+    }
+    setPhase6Result({ action: "load_recurring_bills", ...result });
+  } catch (error) {
+    setPhase6Result({ action: "load_recurring_bills", error: error.message });
+  }
+});
+
+el.payBillBtn?.addEventListener("click", async () => {
+  try {
+    const billId = el.billId.value.trim();
+    if (!billId) {
+      setPhase6Result({ action: "pay_recurring_bill", error: "Provide recurring bill ID" });
+      return;
+    }
+
+    const paidAmountRaw = el.billPayAmountPaise.value.trim();
+    const payload = {
+      paid_amount_paise: paidAmountRaw ? toIntOrZero(paidAmountRaw) : undefined,
+      payment_mode: el.billPayMode.value.trim() || undefined,
+      note: el.billPayNote.value.trim() || undefined
+    };
+
+    const result = await api(`/v1/recurring-bills/${billId}/pay`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    setPhase6Result({ action: "pay_recurring_bill", ...result });
+  } catch (error) {
+    setPhase6Result({ action: "pay_recurring_bill", error: error.message });
   }
 });
 
@@ -344,6 +1049,8 @@ el.createEstimateBtn.addEventListener("click", async () => {
 
     el.estimateId.value = result.data.id;
     setPhase4Result({ action: "create_estimate", ...result });
+    setPhase4Highlights("create_estimate", result);
+    await refreshEstimateSnapshotSilently("create_estimate_refresh");
   } catch (error) {
     setPhase4Result({ action: "create_estimate", error: error.message });
   }
@@ -358,6 +1065,7 @@ el.getEstimateBtn.addEventListener("click", async () => {
     }
     const result = await api(`/v1/estimates/${estimateId}`, { method: "GET" });
     setPhase4Result({ action: "get_estimate", ...result });
+    setPhase4Highlights("get_estimate", result);
   } catch (error) {
     setPhase4Result({ action: "get_estimate", error: error.message });
   }
@@ -372,8 +1080,50 @@ el.listCaseEstimatesBtn.addEventListener("click", async () => {
     }
     const result = await api(`/v1/cases/${caseId}/estimates`, { method: "GET" });
     setPhase4Result({ action: "list_case_estimates", ...result });
+    if (result.data && result.data[0]) {
+      updatePhase4Chips(result.data[0]);
+      el.phase4Highlights.textContent = [
+        "action: list_case_estimates",
+        `count: ${result.data.length}`,
+        `latest_estimate_id: ${result.data[0].id}`,
+        `latest_invoice_state: ${result.data[0].invoice_state || "NA"}`,
+        `latest_locked: ${String(Boolean(result.data[0].is_financial_locked))}`,
+        `latest_override_count: ${result.data[0].override_count ?? 0}`
+      ].join("\n");
+    }
   } catch (error) {
     setPhase4Result({ action: "list_case_estimates", error: error.message });
+  }
+});
+
+el.loadLatestEstimateBtn?.addEventListener("click", async () => {
+  try {
+    const caseId = el.estimateCaseId.value.trim();
+    if (!caseId) {
+      setPhase4Result({ action: "load_latest_estimate", error: "Provide case_id" });
+      return;
+    }
+
+    const result = await api(`/v1/cases/${caseId}/estimates?limit=1`, { method: "GET" });
+    const latest = result.data?.[0];
+    if (!latest) {
+      setPhase4Result({ action: "load_latest_estimate", error: "No estimates found for case" });
+      return;
+    }
+
+    el.estimateId.value = latest.id;
+    setPhase4Result({ action: "load_latest_estimate", estimate_id: latest.id, latest });
+    updatePhase4Chips(latest);
+    el.phase4Highlights.textContent = [
+      "action: load_latest_estimate",
+      `estimate_id: ${latest.id}`,
+      `decision: ${latest.decision || "NA"}`,
+      `invoice_state: ${latest.invoice_state || "NA"}`,
+      `locked: ${String(Boolean(latest.is_financial_locked))}`,
+      `override_count: ${latest.override_count ?? 0}`
+    ].join("\n");
+  } catch (error) {
+    setPhase4Result({ action: "load_latest_estimate", error: error.message });
   }
 });
 
@@ -398,12 +1148,18 @@ el.setEstimateDecisionBtn.addEventListener("click", async () => {
     });
 
     setPhase4Result({ action: "set_estimate_decision", ...result });
+    setPhase4Highlights("set_estimate_decision", result);
+    await refreshEstimateSnapshotSilently("set_estimate_decision_refresh");
   } catch (error) {
     setPhase4Result({ action: "set_estimate_decision", error: error.message });
   }
 });
 
 el.finalizeEstimateBtn.addEventListener("click", async () => {
+  if (!ensurePhase4Confirm(el.confirmFinalize, "Confirm financial lock before finalizing", "finalize_estimate")) {
+    return;
+  }
+
   try {
     const estimateId = el.estimateId.value.trim();
     if (!estimateId) {
@@ -417,12 +1173,18 @@ el.finalizeEstimateBtn.addEventListener("click", async () => {
     });
 
     setPhase4Result({ action: "finalize_estimate", ...result });
+    setPhase4Highlights("finalize_estimate", result);
+    await refreshEstimateSnapshotSilently("finalize_estimate_refresh");
   } catch (error) {
     setPhase4Result({ action: "finalize_estimate", error: error.message });
   }
 });
 
 el.overrideEstimateBtn.addEventListener("click", async () => {
+  if (!ensurePhase4Confirm(el.confirmOverride, "Confirm audited override before editing finalized estimate", "override_estimate")) {
+    return;
+  }
+
   try {
     const estimateId = el.estimateId.value.trim();
     if (!estimateId) {
@@ -443,12 +1205,18 @@ el.overrideEstimateBtn.addEventListener("click", async () => {
     });
 
     setPhase4Result({ action: "override_estimate", ...result });
+    setPhase4Highlights("override_estimate", result);
+    await refreshEstimateSnapshotSilently("override_estimate_refresh");
   } catch (error) {
     setPhase4Result({ action: "override_estimate", error: error.message });
   }
 });
 
 el.createCreditNoteBtn.addEventListener("click", async () => {
+  if (!ensurePhase4Confirm(el.confirmCreditNote, "Confirm credit note posting before submitting", "create_credit_note")) {
+    return;
+  }
+
   try {
     const estimateId = el.estimateId.value.trim();
     if (!estimateId) {
@@ -468,9 +1236,30 @@ el.createCreditNoteBtn.addEventListener("click", async () => {
     });
 
     setPhase4Result({ action: "create_credit_note", ...result });
+    setPhase4Highlights("create_credit_note", result);
+    await refreshEstimateSnapshotSilently("create_credit_note_refresh");
   } catch (error) {
     setPhase4Result({ action: "create_credit_note", error: error.message });
   }
 });
 
+[
+  el.laborPaise,
+  el.sparePaise,
+  el.otherPaise,
+  el.discountPaise,
+  el.gstRequired
+].forEach((node) => {
+  node?.addEventListener("input", computePreview);
+  node?.addEventListener("change", computePreview);
+});
+
+computePreview();
+updatePhase5StockWarning();
+if (!el.expenseDateLocal.value) {
+  el.expenseDateLocal.value = toDateLocalString();
+}
+if (!el.billDueDate.value) {
+  el.billDueDate.value = toDateLocalString(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
+}
 loadMe();

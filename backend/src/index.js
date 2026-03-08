@@ -161,6 +161,74 @@ function parsePaise(value, fallback = 0) {
   return parsed;
 }
 
+function parseNumericQty(value, fallback = null) {
+  if (value === undefined || value === null || value === "") return fallback;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  return parsed;
+}
+
+function parsePositiveNumber(value, fallback = null) {
+  const parsed = parseNumericQty(value, fallback);
+  if (parsed === null) return null;
+  return parsed > 0 ? parsed : null;
+}
+
+function toLowerTrim(value) {
+  return ensureNonEmptyString(value) ? value.trim().toLowerCase() : "";
+}
+
+function toStableJson(value) {
+  if (value === null || value === undefined) return "null";
+  if (typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map((x) => toStableJson(x)).join(",")}]`;
+  const keys = Object.keys(value).sort();
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${toStableJson(value[k])}`).join(",")}}`;
+}
+
+async function sha256Hex(input) {
+  const data = new TextEncoder().encode(input);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  const bytes = Array.from(new Uint8Array(digest));
+  return bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function parseSettingNumber(value, fallback) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return fallback;
+}
+
+function isValidDateLocal(value) {
+  if (!ensureNonEmptyString(value)) return false;
+  return /^\d{4}-\d{2}-\d{2}$/.test(value.trim());
+}
+
+function addDaysDateLocal(dateLocal, days) {
+  if (!isValidDateLocal(dateLocal)) return null;
+  const base = new Date(`${dateLocal}T00:00:00.000Z`);
+  if (Number.isNaN(base.getTime())) return null;
+  base.setUTCDate(base.getUTCDate() + days);
+  return base.toISOString().slice(0, 10);
+}
+
+function getBillReminderState(dueDateLocal, businessDateLocal) {
+  if (!isValidDateLocal(dueDateLocal) || !isValidDateLocal(businessDateLocal)) return "unknown";
+
+  const due = new Date(`${dueDateLocal}T00:00:00.000Z`);
+  const business = new Date(`${businessDateLocal}T00:00:00.000Z`);
+  const diffDays = Math.round((due.getTime() - business.getTime()) / (24 * 60 * 60 * 1000));
+
+  if (diffDays < 0) return "overdue";
+  if (diffDays === 0) return "due_today";
+  if (diffDays <= 3) return "due_in_3_days";
+  if (diffDays <= 7) return "due_in_7_days";
+  return "upcoming";
+}
+
 function computeGstPaise(baseBillPaise, gstRateBps) {
   const base = BigInt(baseBillPaise);
   const rate = BigInt(gstRateBps);
@@ -510,6 +578,18 @@ async function requireAuth(request, env) {
 
 function requireRole(user, allowedRoles) {
   return allowedRoles.includes(user.role);
+}
+
+function mapDbRuleError(error, defaultCode = "VALIDATION_ERROR", defaultMessage = "Request violates database rules") {
+  const errCode = String(error?.code || "");
+  if (errCode === "P0001" || errCode === "23503" || errCode === "23514") {
+    return {
+      status: 409,
+      code: defaultCode,
+      message: error?.message || defaultMessage
+    };
+  }
+  return null;
 }
 
 function getConfigStatus(env) {
@@ -885,6 +965,139 @@ export default {
       return json(200, { code: "OK", data: data || [] });
     }
 
+    if (request.method === "GET" && /^\/v1\/cases\/[^/]+\/consumption$/.test(url.pathname)) {
+      const auth = await requireAuth(request, env);
+      if (auth.error) return auth.error;
+      if (!requireRole(auth.user, ["Admin", "IT", "Staff"])) {
+        return json(403, { code: "FORBIDDEN", message: "Role not allowed" });
+      }
+
+      const caseId = url.pathname.split("/")[3];
+      const { limit, offset } = getPagination(url);
+      let query = auth.serviceClient
+        .from("case_spare_consumption")
+        .select("id, case_id, case_item_id, inventory_item_id, qty, uom, unit_cost_paise_snapshot, line_cost_paise, consumed_at_utc, consumed_by, reversal_of_consumption_id, notes, created_at, case_items!inner(id, case_id, line_no, item_status), inventory_items!inner(id, sku, item_name, uom)")
+        .eq("tenant_id", auth.user.tenantId)
+        .eq("case_id", caseId)
+        .order("consumed_at_utc", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      const caseItemId = (url.searchParams.get("case_item_id") || "").trim();
+      if (caseItemId) query = query.eq("case_item_id", caseItemId);
+
+      const { data, error } = await query;
+      if (error) {
+        return json(500, { code: "CASE_CONSUMPTION_FETCH_FAILED", message: "Unable to fetch case consumption" });
+      }
+
+      return json(200, {
+        code: "OK",
+        data: data || [],
+        pagination: { limit, offset }
+      });
+    }
+
+    if (request.method === "POST" && /^\/v1\/cases\/[^/]+\/consumption$/.test(url.pathname)) {
+      const auth = await requireAuth(request, env);
+      if (auth.error) return auth.error;
+      if (!requireRole(auth.user, ["Admin", "IT", "Staff"])) {
+        return json(403, { code: "FORBIDDEN", message: "Role not allowed" });
+      }
+
+      const caseId = url.pathname.split("/")[3];
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return json(400, { code: "INVALID_JSON", message: "Request body must be valid JSON" });
+      }
+
+      const caseItemId = body?.case_item_id;
+      const inventoryItemId = body?.inventory_item_id;
+      const qty = parseNumericQty(body?.qty, null);
+
+      if (!ensureId(caseItemId) || !ensureId(inventoryItemId)) {
+        return json(400, { code: "VALIDATION_ERROR", message: "case_item_id and inventory_item_id are required" });
+      }
+      if (qty === null || qty <= 0) {
+        return json(400, { code: "VALIDATION_ERROR", message: "qty must be a positive number" });
+      }
+
+      const svc = auth.serviceClient;
+      const { data: caseExists, error: caseErr } = await svc
+        .from("cases")
+        .select("id")
+        .eq("tenant_id", auth.user.tenantId)
+        .eq("id", caseId)
+        .maybeSingle();
+      if (caseErr) return json(500, { code: "CASE_FETCH_FAILED", message: "Unable to validate case" });
+      if (!caseExists) return json(404, { code: "NOT_FOUND", message: "Case not found" });
+
+      const unitCostInput = body?.unit_cost_paise_snapshot;
+      const parsedUnitCost = unitCostInput === undefined || unitCostInput === null || unitCostInput === ""
+        ? null
+        : parsePaise(unitCostInput, 0);
+      if (unitCostInput !== undefined && parsedUnitCost === null) {
+        return json(400, { code: "VALIDATION_ERROR", message: "unit_cost_paise_snapshot must be non-negative paise integer" });
+      }
+
+      const lineCostInput = body?.line_cost_paise;
+      const parsedLineCost = lineCostInput === undefined || lineCostInput === null || lineCostInput === ""
+        ? null
+        : parsePaise(lineCostInput, 0);
+      if (lineCostInput !== undefined && parsedLineCost === null) {
+        return json(400, { code: "VALIDATION_ERROR", message: "line_cost_paise must be non-negative paise integer" });
+      }
+
+      const nowIso = new Date().toISOString();
+      const insertPayload = {
+        tenant_id: auth.user.tenantId,
+        case_id: caseId,
+        case_item_id: caseItemId,
+        inventory_item_id: inventoryItemId,
+        qty,
+        uom: ensureNonEmptyString(body?.uom) ? body.uom.trim() : null,
+        unit_cost_paise_snapshot: parsedUnitCost,
+        line_cost_paise: parsedLineCost,
+        consumed_at_utc: toIsoStringSafe(body?.consumed_at_utc) || nowIso,
+        consumed_by: auth.user.id,
+        notes: ensureNonEmptyString(body?.notes) ? body.notes.trim() : null,
+        is_active: true,
+        created_at: nowIso,
+        updated_at: nowIso,
+        created_by: auth.user.id,
+        updated_by: auth.user.id
+      };
+
+      const { data: created, error: createErr } = await svc
+        .from("case_spare_consumption")
+        .insert(insertPayload)
+        .select("id, case_id, case_item_id, inventory_item_id, qty, uom, unit_cost_paise_snapshot, line_cost_paise, consumed_at_utc, notes, created_at")
+        .single();
+
+      if (createErr) {
+        const mapped = mapDbRuleError(createErr, "CASE_CONSUMPTION_RULE_VIOLATION", "Consumption failed due to inventory/case rule violation");
+        if (mapped) return json(mapped.status, { code: mapped.code, message: mapped.message });
+        return json(500, { code: "CASE_CONSUMPTION_CREATE_FAILED", message: "Unable to create case consumption" });
+      }
+
+      const { data: itemStock } = await svc
+        .from("inventory_items")
+        .select("id, sku, item_name, current_stock_qty, reorder_level_qty")
+        .eq("tenant_id", auth.user.tenantId)
+        .eq("id", inventoryItemId)
+        .maybeSingle();
+
+      return json(201, {
+        code: "OK",
+        message: "Case consumption recorded and stock deducted",
+        data: {
+          consumption: created,
+          inventory_after: itemStock || null
+        }
+      });
+    }
+
     if (request.method === "POST" && /^\/v1\/cases\/[^/]+\/items\/[^/]+\/status$/.test(url.pathname)) {
       const auth = await requireAuth(request, env);
       if (auth.error) return auth.error;
@@ -1002,6 +1215,212 @@ export default {
         .range(offset, offset + limit - 1);
 
       if (error) return json(500, { code: "ESTIMATE_FETCH_FAILED", message: "Unable to fetch case estimates" });
+      return json(200, { code: "OK", data: data || [], pagination: { limit, offset } });
+    }
+
+    if (request.method === "GET" && url.pathname === "/v1/inventory/items") {
+      const auth = await requireAuth(request, env);
+      if (auth.error) return auth.error;
+      if (!requireRole(auth.user, ["Admin", "IT", "Staff"])) {
+        return json(403, { code: "FORBIDDEN", message: "Role not allowed" });
+      }
+
+      const { limit, offset } = getPagination(url);
+      const q = (url.searchParams.get("q") || "").trim();
+      const lowStockOnly = String(url.searchParams.get("low_stock_only") || "false").toLowerCase() === "true";
+
+      let query = auth.serviceClient
+        .from("inventory_items")
+        .select("id, sku, item_name, uom, current_stock_qty, reorder_level_qty, default_unit_cost_paise, valuation_method, is_active, created_at, updated_at")
+        .eq("tenant_id", auth.user.tenantId)
+        .order("updated_at", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (q) {
+        query = query.or(`item_name.ilike.%${q}%,sku.ilike.%${q}%`);
+      }
+
+      if (lowStockOnly) {
+        query = query.filter("current_stock_qty", "lte", "reorder_level_qty");
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        return json(500, { code: "INVENTORY_FETCH_FAILED", message: "Unable to fetch inventory items" });
+      }
+
+      return json(200, { code: "OK", data: data || [], pagination: { limit, offset } });
+    }
+
+    if (request.method === "POST" && url.pathname === "/v1/inventory/items") {
+      const auth = await requireAuth(request, env);
+      if (auth.error) return auth.error;
+      if (!requireRole(auth.user, ["Admin", "IT"])) {
+        return json(403, { code: "FORBIDDEN", message: "Admin/IT role required" });
+      }
+
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return json(400, { code: "INVALID_JSON", message: "Request body must be valid JSON" });
+      }
+
+      if (!ensureNonEmptyString(body?.item_name)) {
+        return json(400, { code: "VALIDATION_ERROR", message: "item_name is required" });
+      }
+
+      const currentStockQty = parseNumericQty(body?.current_stock_qty, 0);
+      const reorderLevelQty = parseNumericQty(body?.reorder_level_qty, 0);
+      if (currentStockQty === null || currentStockQty < 0 || reorderLevelQty === null || reorderLevelQty < 0) {
+        return json(400, { code: "VALIDATION_ERROR", message: "current_stock_qty and reorder_level_qty must be non-negative numbers" });
+      }
+
+      const defaultUnitCostPaise = parsePaise(body?.default_unit_cost_paise, 0);
+      if (defaultUnitCostPaise === null) {
+        return json(400, { code: "VALIDATION_ERROR", message: "default_unit_cost_paise must be non-negative paise integer" });
+      }
+
+      const valuationMethod = ensureNonEmptyString(body?.valuation_method) ? body.valuation_method.trim() : "WEIGHTED_AVERAGE";
+      if (!["FIFO", "WEIGHTED_AVERAGE"].includes(valuationMethod)) {
+        return json(400, { code: "VALIDATION_ERROR", message: "valuation_method must be FIFO or WEIGHTED_AVERAGE" });
+      }
+
+      const nowIso = new Date().toISOString();
+      const payload = {
+        tenant_id: auth.user.tenantId,
+        sku: ensureNonEmptyString(body?.sku) ? body.sku.trim() : null,
+        item_name: body.item_name.trim(),
+        uom: ensureNonEmptyString(body?.uom) ? body.uom.trim() : "pcs",
+        current_stock_qty: currentStockQty,
+        reorder_level_qty: reorderLevelQty,
+        default_unit_cost_paise: defaultUnitCostPaise,
+        valuation_method: valuationMethod,
+        is_active: body?.is_active === undefined ? true : Boolean(body.is_active),
+        created_at: nowIso,
+        updated_at: nowIso,
+        created_by: auth.user.id,
+        updated_by: auth.user.id
+      };
+
+      const { data: created, error: createErr } = await auth.serviceClient
+        .from("inventory_items")
+        .insert(payload)
+        .select("id, sku, item_name, uom, current_stock_qty, reorder_level_qty, default_unit_cost_paise, valuation_method, is_active, created_at")
+        .single();
+
+      if (createErr) {
+        const duplicate = String(createErr.code || "") === "23505";
+        if (duplicate) {
+          return json(409, { code: "INVENTORY_SKU_EXISTS", message: "sku already exists for tenant" });
+        }
+        return json(500, { code: "INVENTORY_CREATE_FAILED", message: "Unable to create inventory item" });
+      }
+
+      return json(201, { code: "OK", message: "Inventory item created", data: created });
+    }
+
+    if (request.method === "PATCH" && /^\/v1\/inventory\/items\/[^/]+$/.test(url.pathname)) {
+      const auth = await requireAuth(request, env);
+      if (auth.error) return auth.error;
+      if (!requireRole(auth.user, ["Admin", "IT"])) {
+        return json(403, { code: "FORBIDDEN", message: "Admin/IT role required" });
+      }
+
+      const inventoryItemId = url.pathname.split("/")[4];
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return json(400, { code: "INVALID_JSON", message: "Request body must be valid JSON" });
+      }
+
+      const patch = {
+        updated_at: new Date().toISOString(),
+        updated_by: auth.user.id
+      };
+
+      if (body?.sku !== undefined) patch.sku = ensureNonEmptyString(body.sku) ? body.sku.trim() : null;
+      if (body?.item_name !== undefined) {
+        if (!ensureNonEmptyString(body.item_name)) {
+          return json(400, { code: "VALIDATION_ERROR", message: "item_name cannot be empty" });
+        }
+        patch.item_name = body.item_name.trim();
+      }
+      if (body?.uom !== undefined) patch.uom = ensureNonEmptyString(body.uom) ? body.uom.trim() : "pcs";
+
+      if (body?.reorder_level_qty !== undefined) {
+        const reorderQty = parseNumericQty(body.reorder_level_qty, null);
+        if (reorderQty === null || reorderQty < 0) {
+          return json(400, { code: "VALIDATION_ERROR", message: "reorder_level_qty must be non-negative" });
+        }
+        patch.reorder_level_qty = reorderQty;
+      }
+
+      if (body?.default_unit_cost_paise !== undefined) {
+        const defaultCost = parsePaise(body.default_unit_cost_paise, 0);
+        if (defaultCost === null) {
+          return json(400, { code: "VALIDATION_ERROR", message: "default_unit_cost_paise must be non-negative paise integer" });
+        }
+        patch.default_unit_cost_paise = defaultCost;
+      }
+
+      if (body?.valuation_method !== undefined) {
+        const valuationMethod = ensureNonEmptyString(body.valuation_method) ? body.valuation_method.trim() : "";
+        if (!["FIFO", "WEIGHTED_AVERAGE"].includes(valuationMethod)) {
+          return json(400, { code: "VALIDATION_ERROR", message: "valuation_method must be FIFO or WEIGHTED_AVERAGE" });
+        }
+        patch.valuation_method = valuationMethod;
+      }
+
+      if (body?.is_active !== undefined) patch.is_active = Boolean(body.is_active);
+
+      const { data: updated, error: updateErr } = await auth.serviceClient
+        .from("inventory_items")
+        .update(patch)
+        .eq("tenant_id", auth.user.tenantId)
+        .eq("id", inventoryItemId)
+        .select("id, sku, item_name, uom, current_stock_qty, reorder_level_qty, default_unit_cost_paise, valuation_method, is_active, updated_at")
+        .maybeSingle();
+
+      if (updateErr) {
+        const duplicate = String(updateErr.code || "") === "23505";
+        if (duplicate) {
+          return json(409, { code: "INVENTORY_SKU_EXISTS", message: "sku already exists for tenant" });
+        }
+        return json(500, { code: "INVENTORY_UPDATE_FAILED", message: "Unable to update inventory item" });
+      }
+      if (!updated) return json(404, { code: "NOT_FOUND", message: "Inventory item not found" });
+
+      return json(200, { code: "OK", message: "Inventory item updated", data: updated });
+    }
+
+    if (request.method === "GET" && url.pathname === "/v1/inventory/ledger") {
+      const auth = await requireAuth(request, env);
+      if (auth.error) return auth.error;
+      if (!requireRole(auth.user, ["Admin", "IT", "Staff"])) {
+        return json(403, { code: "FORBIDDEN", message: "Role not allowed" });
+      }
+
+      const { limit, offset } = getPagination(url);
+      const inventoryItemId = (url.searchParams.get("inventory_item_id") || "").trim();
+      const refEntity = (url.searchParams.get("ref_entity") || "").trim();
+      const refId = (url.searchParams.get("ref_id") || "").trim();
+
+      let query = auth.serviceClient
+        .from("stock_ledger")
+        .select("id, inventory_item_id, txn_type, ref_entity, ref_id, qty, unit_cost_paise, total_cost_paise, balance_after_qty, txn_at_utc, created_by, inventory_items(id, sku, item_name, uom)")
+        .eq("tenant_id", auth.user.tenantId)
+        .order("txn_at_utc", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (inventoryItemId) query = query.eq("inventory_item_id", inventoryItemId);
+      if (refEntity) query = query.eq("ref_entity", refEntity);
+      if (refId) query = query.eq("ref_id", refId);
+
+      const { data, error } = await query;
+      if (error) return json(500, { code: "INVENTORY_LEDGER_FETCH_FAILED", message: "Unable to fetch stock ledger" });
+
       return json(200, { code: "OK", data: data || [], pagination: { limit, offset } });
     }
 
@@ -1506,6 +1925,360 @@ export default {
       return json(201, { code: "OK", message: "Credit note posted", data: creditNote });
     }
 
+    if (request.method === "GET" && url.pathname === "/v1/expenses") {
+      const auth = await requireAuth(request, env);
+      if (auth.error) return auth.error;
+      if (!requireRole(auth.user, ["Admin", "IT", "Staff"])) {
+        return json(403, { code: "FORBIDDEN", message: "Role not allowed" });
+      }
+
+      const { limit, offset } = getPagination(url);
+      const fromDate = (url.searchParams.get("from_date") || "").trim();
+      const toDate = (url.searchParams.get("to_date") || "").trim();
+      const category = (url.searchParams.get("category") || "").trim();
+
+      let query = auth.serviceClient
+        .from("expenses")
+        .select("id, tenant_id, expense_date_local, category, amount_paise, payment_mode, note, receipt_ref, is_active, created_at, created_by")
+        .eq("tenant_id", auth.user.tenantId)
+        .eq("is_active", true)
+        .order("expense_date_local", { ascending: false })
+        .order("created_at", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (isValidDateLocal(fromDate)) query = query.gte("expense_date_local", fromDate);
+      if (isValidDateLocal(toDate)) query = query.lte("expense_date_local", toDate);
+      if (category) query = query.eq("category", category);
+
+      const { data, error } = await query;
+      if (error) return json(500, { code: "EXPENSES_FETCH_FAILED", message: "Unable to fetch expenses" });
+
+      return json(200, { code: "OK", data: data || [], pagination: { limit, offset } });
+    }
+
+    if (request.method === "POST" && url.pathname === "/v1/expenses") {
+      const auth = await requireAuth(request, env);
+      if (auth.error) return auth.error;
+      if (!requireRole(auth.user, ["Admin", "IT", "Staff"])) {
+        return json(403, { code: "FORBIDDEN", message: "Role not allowed" });
+      }
+
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return json(400, { code: "INVALID_JSON", message: "Request body must be valid JSON" });
+      }
+
+      const category = ensureNonEmptyString(body?.category) ? body.category.trim() : "";
+      const amountPaise = parsePaise(body?.amount_paise, -1);
+      if (!category) return json(400, { code: "VALIDATION_ERROR", message: "category is required" });
+      if (!Number.isInteger(amountPaise) || amountPaise < 0) {
+        return json(400, { code: "VALIDATION_ERROR", message: "amount_paise must be a non-negative paise integer" });
+      }
+
+      const timezone = env.DEFAULT_TIMEZONE || "Asia/Kolkata";
+      const expenseDateLocal = isValidDateLocal(body?.expense_date_local)
+        ? String(body.expense_date_local).trim()
+        : getBusinessDateInTimezone(timezone);
+
+      const nowIso = new Date().toISOString();
+      const payload = {
+        tenant_id: auth.user.tenantId,
+        expense_date_local: expenseDateLocal,
+        category,
+        amount_paise: amountPaise,
+        payment_mode: ensureNonEmptyString(body?.payment_mode) ? body.payment_mode.trim() : null,
+        note: ensureNonEmptyString(body?.note) ? body.note.trim() : null,
+        receipt_ref: ensureNonEmptyString(body?.receipt_ref) ? body.receipt_ref.trim() : null,
+        is_active: body?.is_active === undefined ? true : Boolean(body.is_active),
+        created_at: nowIso,
+        updated_at: nowIso,
+        created_by: auth.user.id,
+        updated_by: auth.user.id
+      };
+
+      const { data, error } = await auth.serviceClient
+        .from("expenses")
+        .insert(payload)
+        .select("id, expense_date_local, category, amount_paise, payment_mode, note, receipt_ref, is_active, created_at")
+        .single();
+
+      if (error) {
+        const mapped = mapDbRuleError(error, "EXPENSE_CREATE_FAILED", "Expense payload violates database rules");
+        if (mapped) return json(mapped.status, { code: mapped.code, message: mapped.message });
+        return json(500, { code: "EXPENSE_CREATE_FAILED", message: "Unable to create expense" });
+      }
+
+      return json(201, { code: "OK", message: "Expense created", data });
+    }
+
+    if (request.method === "GET" && url.pathname === "/v1/recurring-bills") {
+      const auth = await requireAuth(request, env);
+      if (auth.error) return auth.error;
+      if (!requireRole(auth.user, ["Admin", "IT", "Staff"])) {
+        return json(403, { code: "FORBIDDEN", message: "Role not allowed" });
+      }
+
+      const { limit, offset } = getPagination(url);
+      const businessDate = getBusinessDateInTimezone(env.DEFAULT_TIMEZONE || "Asia/Kolkata");
+      const reminderFilter = (url.searchParams.get("reminder_state") || "").trim();
+
+      const { data, error } = await auth.serviceClient
+        .from("recurring_bills")
+        .select("id, bill_name, category, amount_paise, due_date, frequency_days, reminder_offsets_json, last_paid_at_utc, last_paid_amount_paise, last_payment_note, is_active, updated_at")
+        .eq("tenant_id", auth.user.tenantId)
+        .eq("is_active", true)
+        .order("due_date", { ascending: true })
+        .range(offset, offset + limit - 1);
+
+      if (error) return json(500, { code: "RECURRING_BILLS_FETCH_FAILED", message: "Unable to fetch recurring bills" });
+
+      const enriched = (data || []).map((row) => ({
+        ...row,
+        reminder_state: getBillReminderState(row.due_date, businessDate)
+      }));
+
+      const filtered = reminderFilter
+        ? enriched.filter((row) => row.reminder_state === reminderFilter)
+        : enriched;
+
+      return json(200, {
+        code: "OK",
+        data: filtered,
+        meta: { business_date_local: businessDate },
+        pagination: { limit, offset }
+      });
+    }
+
+    if (request.method === "POST" && url.pathname === "/v1/recurring-bills") {
+      const auth = await requireAuth(request, env);
+      if (auth.error) return auth.error;
+      if (!requireRole(auth.user, ["Admin", "IT"])) {
+        return json(403, { code: "FORBIDDEN", message: "Admin/IT role required" });
+      }
+
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return json(400, { code: "INVALID_JSON", message: "Request body must be valid JSON" });
+      }
+
+      const billName = ensureNonEmptyString(body?.bill_name) ? body.bill_name.trim() : "";
+      const amountPaise = parsePaise(body?.amount_paise, -1);
+      const dueDate = ensureNonEmptyString(body?.due_date) ? body.due_date.trim() : "";
+      const frequencyDays = toSafeInt(body?.frequency_days, 30);
+      if (!billName) return json(400, { code: "VALIDATION_ERROR", message: "bill_name is required" });
+      if (!Number.isInteger(amountPaise) || amountPaise < 0) {
+        return json(400, { code: "VALIDATION_ERROR", message: "amount_paise must be a non-negative paise integer" });
+      }
+      if (!isValidDateLocal(dueDate)) return json(400, { code: "VALIDATION_ERROR", message: "due_date must be YYYY-MM-DD" });
+      if (!Number.isInteger(frequencyDays) || frequencyDays < 1) {
+        return json(400, { code: "VALIDATION_ERROR", message: "frequency_days must be a positive integer" });
+      }
+
+      let reminderOffsets = [7, 3, 0];
+      if (Array.isArray(body?.reminder_offsets)) {
+        const parsed = body.reminder_offsets
+          .map((x) => toSafeInt(x, -1))
+          .filter((x) => Number.isInteger(x) && x >= 0);
+        if (parsed.length > 0) reminderOffsets = Array.from(new Set(parsed)).sort((a, b) => b - a);
+      }
+
+      const nowIso = new Date().toISOString();
+      const payload = {
+        tenant_id: auth.user.tenantId,
+        bill_name: billName,
+        category: ensureNonEmptyString(body?.category) ? body.category.trim() : null,
+        amount_paise: amountPaise,
+        due_date: dueDate,
+        frequency_days: frequencyDays,
+        reminder_offsets_json: reminderOffsets,
+        is_active: body?.is_active === undefined ? true : Boolean(body.is_active),
+        created_at: nowIso,
+        updated_at: nowIso,
+        created_by: auth.user.id,
+        updated_by: auth.user.id
+      };
+
+      const { data, error } = await auth.serviceClient
+        .from("recurring_bills")
+        .insert(payload)
+        .select("id, bill_name, category, amount_paise, due_date, frequency_days, reminder_offsets_json, is_active, created_at")
+        .single();
+
+      if (error) {
+        const mapped = mapDbRuleError(error, "RECURRING_BILL_CREATE_FAILED", "Recurring bill payload violates database rules");
+        if (mapped) return json(mapped.status, { code: mapped.code, message: mapped.message });
+        return json(500, { code: "RECURRING_BILL_CREATE_FAILED", message: "Unable to create recurring bill" });
+      }
+
+      return json(201, { code: "OK", message: "Recurring bill created", data });
+    }
+
+    if (request.method === "PATCH" && /^\/v1\/recurring-bills\/[^/]+$/.test(url.pathname)) {
+      const auth = await requireAuth(request, env);
+      if (auth.error) return auth.error;
+      if (!requireRole(auth.user, ["Admin", "IT"])) {
+        return json(403, { code: "FORBIDDEN", message: "Admin/IT role required" });
+      }
+
+      const billId = url.pathname.split("/")[3];
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return json(400, { code: "INVALID_JSON", message: "Request body must be valid JSON" });
+      }
+
+      const patch = {
+        updated_at: new Date().toISOString(),
+        updated_by: auth.user.id
+      };
+
+      if (body?.bill_name !== undefined) {
+        if (!ensureNonEmptyString(body.bill_name)) {
+          return json(400, { code: "VALIDATION_ERROR", message: "bill_name cannot be empty" });
+        }
+        patch.bill_name = body.bill_name.trim();
+      }
+      if (body?.category !== undefined) patch.category = ensureNonEmptyString(body.category) ? body.category.trim() : null;
+      if (body?.amount_paise !== undefined) {
+        const amount = parsePaise(body.amount_paise, -1);
+        if (!Number.isInteger(amount) || amount < 0) {
+          return json(400, { code: "VALIDATION_ERROR", message: "amount_paise must be non-negative paise integer" });
+        }
+        patch.amount_paise = amount;
+      }
+      if (body?.due_date !== undefined) {
+        if (!isValidDateLocal(body.due_date)) {
+          return json(400, { code: "VALIDATION_ERROR", message: "due_date must be YYYY-MM-DD" });
+        }
+        patch.due_date = body.due_date.trim();
+      }
+      if (body?.frequency_days !== undefined) {
+        const freq = toSafeInt(body.frequency_days, 0);
+        if (!Number.isInteger(freq) || freq < 1) {
+          return json(400, { code: "VALIDATION_ERROR", message: "frequency_days must be a positive integer" });
+        }
+        patch.frequency_days = freq;
+      }
+      if (body?.reminder_offsets !== undefined) {
+        if (!Array.isArray(body.reminder_offsets)) {
+          return json(400, { code: "VALIDATION_ERROR", message: "reminder_offsets must be an array of non-negative integers" });
+        }
+        const parsed = body.reminder_offsets
+          .map((x) => toSafeInt(x, -1))
+          .filter((x) => Number.isInteger(x) && x >= 0);
+        patch.reminder_offsets_json = Array.from(new Set(parsed)).sort((a, b) => b - a);
+      }
+      if (body?.is_active !== undefined) patch.is_active = Boolean(body.is_active);
+
+      const { data, error } = await auth.serviceClient
+        .from("recurring_bills")
+        .update(patch)
+        .eq("tenant_id", auth.user.tenantId)
+        .eq("id", billId)
+        .select("id, bill_name, category, amount_paise, due_date, frequency_days, reminder_offsets_json, is_active, updated_at")
+        .maybeSingle();
+
+      if (error) {
+        const mapped = mapDbRuleError(error, "RECURRING_BILL_UPDATE_FAILED", "Recurring bill update violates database rules");
+        if (mapped) return json(mapped.status, { code: mapped.code, message: mapped.message });
+        return json(500, { code: "RECURRING_BILL_UPDATE_FAILED", message: "Unable to update recurring bill" });
+      }
+      if (!data) return json(404, { code: "NOT_FOUND", message: "Recurring bill not found" });
+
+      return json(200, { code: "OK", message: "Recurring bill updated", data });
+    }
+
+    if (request.method === "POST" && /^\/v1\/recurring-bills\/[^/]+\/pay$/.test(url.pathname)) {
+      const auth = await requireAuth(request, env);
+      if (auth.error) return auth.error;
+      if (!requireRole(auth.user, ["Admin", "IT"])) {
+        return json(403, { code: "FORBIDDEN", message: "Admin/IT role required" });
+      }
+
+      const billId = url.pathname.split("/")[3];
+      let body = {};
+      try {
+        body = await request.json();
+      } catch {
+        body = {};
+      }
+
+      const { data: bill, error: billErr } = await auth.serviceClient
+        .from("recurring_bills")
+        .select("id, bill_name, amount_paise, due_date, frequency_days, is_active")
+        .eq("tenant_id", auth.user.tenantId)
+        .eq("id", billId)
+        .maybeSingle();
+
+      if (billErr) return json(500, { code: "RECURRING_BILL_FETCH_FAILED", message: "Unable to load recurring bill" });
+      if (!bill || !bill.is_active) return json(404, { code: "NOT_FOUND", message: "Recurring bill not found" });
+
+      const paidAmount = parsePaise(body?.paid_amount_paise, bill.amount_paise);
+      if (!Number.isInteger(paidAmount) || paidAmount < 0) {
+        return json(400, { code: "VALIDATION_ERROR", message: "paid_amount_paise must be a non-negative paise integer" });
+      }
+
+      const paidAtUtc = toIsoStringSafe(body?.paid_at_utc) || new Date().toISOString();
+      const nextDueDate = addDaysDateLocal(bill.due_date, Number(bill.frequency_days) || 30);
+      if (!nextDueDate) {
+        return json(500, { code: "RECURRING_BILL_PAY_FAILED", message: "Unable to compute next due date" });
+      }
+
+      const note = ensureNonEmptyString(body?.note) ? body.note.trim() : null;
+      const mode = ensureNonEmptyString(body?.payment_mode) ? body.payment_mode.trim() : null;
+
+      const { data: paymentRow, error: payErr } = await auth.serviceClient
+        .from("bill_payments")
+        .insert({
+          tenant_id: auth.user.tenantId,
+          recurring_bill_id: bill.id,
+          paid_amount_paise: paidAmount,
+          paid_at_utc: paidAtUtc,
+          payment_mode: mode,
+          note,
+          created_by: auth.user.id
+        })
+        .select("id, recurring_bill_id, paid_amount_paise, paid_at_utc, payment_mode, note, created_at")
+        .single();
+
+      if (payErr) {
+        const mapped = mapDbRuleError(payErr, "RECURRING_BILL_PAY_FAILED", "Bill payment violates database rules");
+        if (mapped) return json(mapped.status, { code: mapped.code, message: mapped.message });
+        return json(500, { code: "RECURRING_BILL_PAY_FAILED", message: "Unable to save bill payment" });
+      }
+
+      const { data: updatedBill, error: updateErr } = await auth.serviceClient
+        .from("recurring_bills")
+        .update({
+          due_date: nextDueDate,
+          last_paid_at_utc: paidAtUtc,
+          last_paid_amount_paise: paidAmount,
+          last_payment_note: note,
+          updated_at: new Date().toISOString(),
+          updated_by: auth.user.id
+        })
+        .eq("tenant_id", auth.user.tenantId)
+        .eq("id", bill.id)
+        .select("id, bill_name, amount_paise, due_date, frequency_days, last_paid_at_utc, last_paid_amount_paise, last_payment_note")
+        .single();
+
+      if (updateErr) return json(500, { code: "RECURRING_BILL_PAY_FAILED", message: "Payment logged but recurring bill update failed" });
+
+      return json(200, {
+        code: "OK",
+        message: "Recurring bill payment logged and next due date advanced",
+        data: {
+          payment: paymentRow,
+          recurring_bill: updatedBill
+        }
+      });
+    }
+
     if (request.method === "GET" && url.pathname === "/v1/followups") {
       const auth = await requireAuth(request, env);
       if (auth.error) return auth.error;
@@ -1741,6 +2514,465 @@ export default {
 
       if (error) return json(500, { code: "OPS_STATUS_SAVE_FAILED", message: "Unable to save ops status" });
       return json(200, { code: "OK", message: "Ops status updated", data });
+    }
+
+    if (request.method === "GET" && url.pathname === "/v1/admin/db-usage") {
+      const auth = await requireAuth(request, env);
+      if (auth.error) return auth.error;
+      if (!requireRole(auth.user, ["Admin", "IT"])) {
+        return json(403, { code: "FORBIDDEN", message: "Admin/IT role required" });
+      }
+
+      const [quotaSetting, thresholdSetting] = await Promise.all([
+        getSettingValue(auth.serviceClient, auth.user.tenantId, "db_quota_mb", 500),
+        getSettingValue(auth.serviceClient, auth.user.tenantId, "db_archive_threshold_pct", 90)
+      ]);
+
+      const defaultQuotaMb = parseSettingNumber(quotaSetting, 500);
+      const defaultThresholdPct = parseSettingNumber(thresholdSetting, 90);
+
+      const { data: latest, error } = await auth.serviceClient
+        .from("db_usage_snapshots")
+        .select("id, observed_at_utc, usage_mb, quota_mb, utilization_pct, threshold_pct, is_triggered, source, details_json, created_at")
+        .eq("tenant_id", auth.user.tenantId)
+        .order("observed_at_utc", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        return json(500, { code: "DB_USAGE_FETCH_FAILED", message: "Unable to fetch DB usage snapshot" });
+      }
+
+      const usageMb = latest ? Number(latest.usage_mb) : null;
+      const quotaMb = latest ? Number(latest.quota_mb) : defaultQuotaMb;
+      const thresholdPct = latest ? Number(latest.threshold_pct) : defaultThresholdPct;
+      const utilizationPct = latest
+        ? Number(latest.utilization_pct)
+        : (quotaMb > 0 && usageMb !== null ? Number(((usageMb / quotaMb) * 100).toFixed(2)) : null);
+
+      const triggerReady = utilizationPct !== null && utilizationPct >= thresholdPct;
+
+      return json(200, {
+        code: "OK",
+        data: {
+          latest_snapshot: latest || null,
+          usage_mb: usageMb,
+          quota_mb: quotaMb,
+          utilization_pct: utilizationPct,
+          threshold_pct: thresholdPct,
+          trigger_ready: triggerReady
+        }
+      });
+    }
+
+    if (request.method === "POST" && url.pathname === "/v1/admin/db-usage") {
+      const auth = await requireAuth(request, env);
+      if (auth.error) return auth.error;
+      if (!requireRole(auth.user, ["Admin", "IT"])) {
+        return json(403, { code: "FORBIDDEN", message: "Admin/IT role required" });
+      }
+
+      let body = {};
+      try {
+        body = await request.json();
+      } catch {
+        body = {};
+      }
+
+      const [quotaSetting, thresholdSetting] = await Promise.all([
+        getSettingValue(auth.serviceClient, auth.user.tenantId, "db_quota_mb", 500),
+        getSettingValue(auth.serviceClient, auth.user.tenantId, "db_archive_threshold_pct", 90)
+      ]);
+
+      const usageMb = parseNumericQty(body.usage_mb, null);
+      const quotaMb = parsePositiveNumber(body.quota_mb, parseSettingNumber(quotaSetting, 500));
+      const thresholdPct = parsePositiveNumber(body.threshold_pct, parseSettingNumber(thresholdSetting, 90));
+
+      if (usageMb === null || usageMb < 0) {
+        return json(400, { code: "VALIDATION_ERROR", message: "usage_mb must be a non-negative number" });
+      }
+      if (quotaMb === null) {
+        return json(400, { code: "VALIDATION_ERROR", message: "quota_mb must be a positive number" });
+      }
+      if (thresholdPct === null || thresholdPct > 100) {
+        return json(400, { code: "VALIDATION_ERROR", message: "threshold_pct must be in range (0, 100]" });
+      }
+
+      const utilizationPct = Number(((usageMb / quotaMb) * 100).toFixed(2));
+      const isTriggered = utilizationPct >= thresholdPct;
+
+      const payload = {
+        tenant_id: auth.user.tenantId,
+        observed_at_utc: toIsoStringSafe(body.observed_at_utc) || new Date().toISOString(),
+        usage_mb: usageMb,
+        quota_mb: quotaMb,
+        utilization_pct: utilizationPct,
+        threshold_pct: thresholdPct,
+        is_triggered: isTriggered,
+        source: ensureNonEmptyString(body.source) ? body.source.trim() : "manual",
+        details_json: body.details_json || null,
+        created_by: auth.user.id
+      };
+
+      const { data, error } = await auth.serviceClient
+        .from("db_usage_snapshots")
+        .insert(payload)
+        .select("id, observed_at_utc, usage_mb, quota_mb, utilization_pct, threshold_pct, is_triggered, source, details_json, created_at")
+        .single();
+
+      if (error) return json(500, { code: "DB_USAGE_SAVE_FAILED", message: "Unable to save DB usage snapshot" });
+
+      return json(201, {
+        code: "OK",
+        message: "DB usage snapshot saved",
+        data: {
+          ...data,
+          trigger_ready: isTriggered
+        }
+      });
+    }
+
+    if (request.method === "POST" && url.pathname === "/v1/admin/archive/trigger-check") {
+      const auth = await requireAuth(request, env);
+      if (auth.error) return auth.error;
+      if (!requireRole(auth.user, ["Admin", "IT"])) {
+        return json(403, { code: "FORBIDDEN", message: "Admin/IT role required" });
+      }
+
+      let body = {};
+      try {
+        body = await request.json();
+      } catch {
+        body = {};
+      }
+
+      const force = Boolean(body.force);
+      const limit = Math.max(1, Math.min(50, toSafeInt(body.limit, 10)));
+
+      const [thresholdSetting, hotRetentionSetting] = await Promise.all([
+        getSettingValue(auth.serviceClient, auth.user.tenantId, "db_archive_threshold_pct", 90),
+        getSettingValue(auth.serviceClient, auth.user.tenantId, "archive_hot_retention_days", 60)
+      ]);
+
+      const thresholdPct = parseSettingNumber(thresholdSetting, 90);
+      const hotRetentionDays = Math.max(1, Math.floor(parseSettingNumber(hotRetentionSetting, 60)));
+
+      const { data: latestUsage, error: usageErr } = await auth.serviceClient
+        .from("db_usage_snapshots")
+        .select("id, observed_at_utc, usage_mb, quota_mb, utilization_pct, threshold_pct, is_triggered")
+        .eq("tenant_id", auth.user.tenantId)
+        .order("observed_at_utc", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (usageErr) return json(500, { code: "ARCHIVE_TRIGGER_CHECK_FAILED", message: "Unable to load DB usage snapshot" });
+      if (!latestUsage) return json(400, { code: "DB_USAGE_REQUIRED", message: "Create a DB usage snapshot before trigger-check" });
+
+      const effectiveThreshold = Number(latestUsage.threshold_pct || thresholdPct);
+      const utilizationPct = Number(latestUsage.utilization_pct || 0);
+      const triggerReady = utilizationPct >= effectiveThreshold;
+
+      if (!triggerReady && !force) {
+        return json(409, {
+          code: "ARCHIVE_TRIGGER_NOT_MET",
+          message: `Archive trigger requires utilization >= ${effectiveThreshold}% (current ${utilizationPct}%)`,
+          data: {
+            utilization_pct: utilizationPct,
+            threshold_pct: effectiveThreshold,
+            force_allowed: true
+          }
+        });
+      }
+
+      const cutoffIso = new Date(Date.now() - (hotRetentionDays * 24 * 60 * 60 * 1000)).toISOString();
+      const { data: candidates, error: candidateErr } = await auth.serviceClient
+        .from("cases")
+        .select("id, case_no, header_status, created_at, customers(name, phone)")
+        .eq("tenant_id", auth.user.tenantId)
+        .eq("is_active", true)
+        .in("header_status", ["DeliveredAll", "Closed"])
+        .lte("created_at", cutoffIso)
+        .order("created_at", { ascending: true })
+        .limit(limit);
+
+      if (candidateErr) return json(500, { code: "ARCHIVE_TRIGGER_CHECK_FAILED", message: "Unable to fetch archive candidates" });
+
+      return json(200, {
+        code: "OK",
+        message: "Archive trigger check complete",
+        data: {
+          utilization_pct: utilizationPct,
+          threshold_pct: effectiveThreshold,
+          trigger_ready: triggerReady || force,
+          forced: force,
+          hot_retention_days: hotRetentionDays,
+          cutoff_created_at_utc: cutoffIso,
+          candidate_count: (candidates || []).length,
+          candidates: candidates || [],
+          note: "Run /v1/admin/archive/cases/{case_id} with verified backup bundle + checksum to archive each case"
+        }
+      });
+    }
+
+    if (request.method === "GET" && url.pathname === "/v1/admin/archive-index") {
+      const auth = await requireAuth(request, env);
+      if (auth.error) return auth.error;
+      if (!requireRole(auth.user, ["Admin", "IT"])) {
+        return json(403, { code: "FORBIDDEN", message: "Admin/IT role required" });
+      }
+
+      const { limit, offset } = getPagination(url);
+      const caseNo = (url.searchParams.get("case_no") || "").trim();
+      const phone = (url.searchParams.get("phone") || "").trim();
+      const customerName = (url.searchParams.get("customer_name") || "").trim();
+      const restoreStatus = (url.searchParams.get("restore_status") || "").trim();
+
+      let query = auth.serviceClient
+        .from("archive_index")
+        .select("id, source_case_id, case_no, customer_name, customer_phone, final_status, archived_at_utc, archive_location_ref, backup_checksum_sha256, checksum_verified, restore_status, restored_at_utc, restored_by, notes, created_at")
+        .eq("tenant_id", auth.user.tenantId)
+        .eq("is_active", true)
+        .order("archived_at_utc", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (caseNo) query = query.ilike("case_no", `%${caseNo}%`);
+      if (phone) query = query.ilike("customer_phone", `%${phone}%`);
+      if (customerName) query = query.ilike("customer_name", `%${customerName}%`);
+      if (restoreStatus) query = query.eq("restore_status", restoreStatus);
+
+      const { data, error } = await query;
+      if (error) return json(500, { code: "ARCHIVE_INDEX_FETCH_FAILED", message: "Unable to fetch archive index" });
+
+      return json(200, { code: "OK", data: data || [], pagination: { limit, offset } });
+    }
+
+    if (request.method === "POST" && /^\/v1\/admin\/archive\/cases\/[^/]+$/.test(url.pathname)) {
+      const auth = await requireAuth(request, env);
+      if (auth.error) return auth.error;
+      if (!requireRole(auth.user, ["Admin", "IT"])) {
+        return json(403, { code: "FORBIDDEN", message: "Admin/IT role required" });
+      }
+
+      const caseId = url.pathname.split("/")[5];
+      let body = {};
+      try {
+        body = await request.json();
+      } catch {
+        body = {};
+      }
+
+      const providedChecksum = toLowerTrim(body.backup_checksum_sha256);
+      const backupBundle = body.backup_bundle_json;
+      const dryRun = Boolean(body.dry_run);
+      const allowOpenCase = Boolean(body.allow_open_case);
+
+      if (!backupBundle || typeof backupBundle !== "object") {
+        return json(400, { code: "BACKUP_REQUIRED", message: "backup_bundle_json object is required before archive" });
+      }
+      if (!providedChecksum || providedChecksum.length < 32) {
+        return json(400, { code: "BACKUP_REQUIRED", message: "backup_checksum_sha256 is required before archive" });
+      }
+
+      const svc = auth.serviceClient;
+      const { data: caseRow, error: caseErr } = await svc
+        .from("cases")
+        .select("id, case_no, header_status, is_active, notes, customers(name, phone)")
+        .eq("tenant_id", auth.user.tenantId)
+        .eq("id", caseId)
+        .maybeSingle();
+
+      if (caseErr) return json(500, { code: "ARCHIVE_CASE_FETCH_FAILED", message: "Unable to load case" });
+      if (!caseRow) return json(404, { code: "NOT_FOUND", message: "Case not found" });
+
+      if (!allowOpenCase && !["DeliveredAll", "Closed"].includes(caseRow.header_status)) {
+        return json(409, { code: "ARCHIVE_NOT_ALLOWED", message: "Only DeliveredAll/Closed cases are eligible by default" });
+      }
+
+      const computedChecksum = await sha256Hex(toStableJson(backupBundle));
+      if (computedChecksum !== providedChecksum) {
+        return json(409, {
+          code: "BACKUP_CHECKSUM_MISMATCH",
+          message: "Provided backup checksum does not match computed checksum. Archive is blocked.",
+          data: { provided_checksum_sha256: providedChecksum, computed_checksum_sha256: computedChecksum }
+        });
+      }
+
+      const nowIso = new Date().toISOString();
+      const customerObj = Array.isArray(caseRow.customers) ? (caseRow.customers[0] || {}) : (caseRow.customers || {});
+      const archivePayload = {
+        tenant_id: auth.user.tenantId,
+        source_case_id: caseRow.id,
+        case_no: caseRow.case_no,
+        customer_name: customerObj.name || null,
+        customer_phone: customerObj.phone || null,
+        final_status: caseRow.header_status,
+        archived_at_utc: nowIso,
+        archive_location_ref: ensureNonEmptyString(body.archive_location_ref) ? body.archive_location_ref.trim() : null,
+        backup_bundle_json: backupBundle,
+        backup_checksum_sha256: providedChecksum,
+        computed_checksum_sha256: computedChecksum,
+        checksum_verified: true,
+        restore_status: "ARCHIVED",
+        notes: ensureNonEmptyString(body.notes) ? body.notes.trim() : null,
+        is_active: true,
+        updated_at: nowIso,
+        updated_by: auth.user.id,
+        created_by: auth.user.id
+      };
+
+      if (dryRun) {
+        return json(200, {
+          code: "OK",
+          message: "Archive dry-run validation passed",
+          data: {
+            dry_run: true,
+            case_id: caseRow.id,
+            case_no: caseRow.case_no,
+            eligible_status: caseRow.header_status,
+            checksum_verified: true,
+            archive_payload_preview: archivePayload
+          }
+        });
+      }
+
+      const { data: archiveRow, error: archiveErr } = await svc
+        .from("archive_index")
+        .upsert(archivePayload, { onConflict: "tenant_id,source_case_id" })
+        .select("id, source_case_id, case_no, archived_at_utc, backup_checksum_sha256, computed_checksum_sha256, checksum_verified, restore_status")
+        .single();
+
+      if (archiveErr) return json(500, { code: "ARCHIVE_INDEX_SAVE_FAILED", message: "Unable to save archive index" });
+
+      if (caseRow.is_active) {
+        await svc
+          .from("cases")
+          .update({
+            is_active: false,
+            updated_at: nowIso,
+            updated_by: auth.user.id
+          })
+          .eq("tenant_id", auth.user.tenantId)
+          .eq("id", caseRow.id);
+
+        await svc
+          .from("case_items")
+          .update({
+            is_active: false,
+            updated_at: nowIso,
+            updated_by: auth.user.id
+          })
+          .eq("tenant_id", auth.user.tenantId)
+          .eq("case_id", caseRow.id);
+      }
+
+      await insertAuditLog(svc, {
+        tenant_id: auth.user.tenantId,
+        actor_user_id: auth.user.id,
+        action: "ARCHIVE_CASE",
+        entity_type: "cases",
+        entity_id: caseRow.id,
+        reason: ensureNonEmptyString(body.notes) ? body.notes.trim() : "Archive workflow",
+        payload_json: {
+          archive_id: archiveRow.id,
+          case_no: caseRow.case_no,
+          checksum_verified: true,
+          backup_checksum_sha256: providedChecksum,
+          computed_checksum_sha256: computedChecksum
+        }
+      });
+
+      return json(200, {
+        code: "OK",
+        message: "Case archived successfully (hot DB set inactive after backup checksum verification)",
+        data: {
+          archive: archiveRow,
+          case_id: caseRow.id,
+          case_no: caseRow.case_no,
+          case_active_after_archive: false
+        }
+      });
+    }
+
+    if (request.method === "POST" && /^\/v1\/admin\/archive\/restore\/[^/]+$/.test(url.pathname)) {
+      const auth = await requireAuth(request, env);
+      if (auth.error) return auth.error;
+      if (!requireRole(auth.user, ["Admin", "IT"])) {
+        return json(403, { code: "FORBIDDEN", message: "Admin/IT role required" });
+      }
+
+      const archiveId = url.pathname.split("/")[5];
+      const svc = auth.serviceClient;
+
+      const { data: archiveRow, error: archiveErr } = await svc
+        .from("archive_index")
+        .select("id, source_case_id, case_no, checksum_verified, restore_status")
+        .eq("tenant_id", auth.user.tenantId)
+        .eq("id", archiveId)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (archiveErr) return json(500, { code: "ARCHIVE_RESTORE_FAILED", message: "Unable to load archive entry" });
+      if (!archiveRow) return json(404, { code: "NOT_FOUND", message: "Archive entry not found" });
+      if (!archiveRow.checksum_verified) {
+        return json(409, { code: "ARCHIVE_RESTORE_BLOCKED", message: "Archive restore blocked because checksum was not verified" });
+      }
+
+      const nowIso = new Date().toISOString();
+
+      await svc
+        .from("cases")
+        .update({
+          is_active: true,
+          updated_at: nowIso,
+          updated_by: auth.user.id
+        })
+        .eq("tenant_id", auth.user.tenantId)
+        .eq("id", archiveRow.source_case_id);
+
+      await svc
+        .from("case_items")
+        .update({
+          is_active: true,
+          updated_at: nowIso,
+          updated_by: auth.user.id
+        })
+        .eq("tenant_id", auth.user.tenantId)
+        .eq("case_id", archiveRow.source_case_id);
+
+      const { data: updatedArchive, error: updErr } = await svc
+        .from("archive_index")
+        .update({
+          restore_status: "RESTORED",
+          restored_at_utc: nowIso,
+          restored_by: auth.user.id,
+          updated_at: nowIso,
+          updated_by: auth.user.id
+        })
+        .eq("tenant_id", auth.user.tenantId)
+        .eq("id", archiveRow.id)
+        .select("id, source_case_id, case_no, restore_status, restored_at_utc, restored_by")
+        .single();
+
+      if (updErr) return json(500, { code: "ARCHIVE_RESTORE_FAILED", message: "Case reactivated but archive status update failed" });
+
+      await insertAuditLog(svc, {
+        tenant_id: auth.user.tenantId,
+        actor_user_id: auth.user.id,
+        action: "RESTORE_ARCHIVED_CASE",
+        entity_type: "cases",
+        entity_id: archiveRow.source_case_id,
+        reason: "Archive restore flow",
+        payload_json: {
+          archive_id: archiveRow.id,
+          case_no: archiveRow.case_no
+        }
+      });
+
+      return json(200, {
+        code: "OK",
+        message: "Archived case restored to hot DB",
+        data: updatedArchive
+      });
     }
 
     if (request.method === "GET" && /^\/v1\/cases\/[^/]+\/status-history$/.test(url.pathname)) {
