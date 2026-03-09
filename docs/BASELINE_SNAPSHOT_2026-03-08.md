@@ -3,17 +3,62 @@
 ## Deployment Baseline
 - Backend API: `https://workshop-api.jaiswal-utkarshuj.workers.dev`
 - Frontend Website: `https://workshop-frontend.pages.dev`
-- Backend deployed version: `be1d0e59-8045-40b2-823b-6c3f55d7e66d`
+- Backend deployed version: `0f75dd6b-9c30-497f-a903-d2a2023d5184`
 
 ## Regression Baseline
 - Phase 5 prod smoke: `PHASE5_UI_PROD_OK`
 - Phase 6 prod smoke: `PHASE6_PROD_OK`
+- Phase 6 archive wrapper: `PHASE6_ARCHIVE_ALL_OK`
+- Phase 7 local smoke: `PHASE7_LOCAL_OK`
+- Phase 7 prod smoke: `PHASE7_PROD_OK`
+- Phase 7 wrapper smoke: `PHASE7_ALL_OK`
+- Phase 7 index verification: `PHASE7_INDEXES_OK`
+- Phase 8 local smoke: `PHASE8_LOCAL_OK`
+- Phase 8 prod smoke: `PHASE8_PROD_OK`
+- Phase 8 wrapper smoke: `PHASE8_ALL_OK`
+- Phase 8 role local smoke: `PHASE8_ROLE_LOCAL_OK`
+- Phase 8 role prod smoke: `PHASE8_ROLE_PROD_OK`
+- Phase 8 role wrapper smoke: `PHASE8_ROLE_ALL_OK`
+- Phase 8 hardening local smoke: `PHASE8_HARDENING_LOCAL_OK`
+- Phase 8 hardening prod smoke: `PHASE8_HARDENING_PROD_OK`
+- Phase 8 hardening wrapper smoke: `PHASE8_HARDENING_ALL_OK`
 
 ## Scope Baseline
 - Phase 0 to Phase 6 expenses/recurring bill vertical slice completed.
 - Phase 6 archive lifecycle implementation started with:
   - migration `backend/migrations/0008_phase6_archive_lifecycle_ops.sql`
   - backend endpoints for DB usage monitor, archive trigger-check, archive index, archive case, and restore case.
+- Phase 7 hardening completed with:
+  - migration `backend/migrations/0009_phase7_observability_perf_baseline.sql` (applied)
+  - request telemetry logging (`api_request_logs`)
+  - metrics endpoint `GET /v1/admin/metrics/summary`
+  - broader query timeout guardrails on list/search endpoints (`cases`, `case items`, `status history`, `case consumption`, `inventory list`, `stock ledger`, `expenses`, `recurring bills`, `ops status`, archive trigger check candidates)
+  - index verification script: `backend/scripts/verify_phase7_indexes.mjs`
+  - Phase 7 smoke scripts: `backend/scripts/smoke_phase7_local.ps1`, `backend/scripts/smoke_phase7_prod.ps1`, `backend/scripts/smoke_phase7_all.ps1`
+- Phase 8 analytics baseline started with:
+  - role-aware endpoint `GET /v1/analytics/overview` (`Admin` full, `IT` restricted finance view, `Staff` finance hidden)
+  - priority KPI blocks: case/follow-up + inventory + expense trend
+  - Admin-only financial rollup visibility in analytics payload
+  - smoke scripts: `backend/scripts/smoke_phase8_local.ps1`, `backend/scripts/smoke_phase8_prod.ps1`, `backend/scripts/smoke_phase8_all.ps1`
+  - frontend analytics card deployed on Pages (role-aware rendering for Admin/IT/Staff)
+  - additive trend breakdown expansion in same endpoint payload:
+    - inventory daily slices
+    - expense daily/category-top slices
+    - Admin-only daily finance trends
+    - IT restricted expense trend slices
+  - explicit role smoke scripts added:
+    - `backend/scripts/smoke_phase8_roles_local.ps1`
+    - `backend/scripts/smoke_phase8_roles_prod.ps1`
+    - `backend/scripts/smoke_phase8_roles_all.ps1`
+  - hardening pass completed on same endpoint:
+    - tighter `row_limit` guardrails (`min=50`, `max=1500`)
+    - per-slice timeout tuning params (`case`, `inventory`, `expense`, `finance`)
+    - response guardrail metadata (`query_guardrails`)
+  - dedicated hardening smoke scripts added:
+    - `backend/scripts/smoke_phase8_hardening_local.ps1`
+    - `backend/scripts/smoke_phase8_hardening_prod.ps1`
+    - `backend/scripts/smoke_phase8_hardening_all.ps1`
 
 ## Operator Note
 - Keep this file as release-level reference before proceeding to next hardening and archive smoke validation.
+- Next release action: start Phase 9 HR module vertical slice (attendance + advances + role-safe visibility), keeping Phase 8 hardening guardrails intact.

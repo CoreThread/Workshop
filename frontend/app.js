@@ -152,7 +152,37 @@ const el = {
   billPayMode: document.getElementById("billPayMode"),
   billPayNote: document.getElementById("billPayNote"),
   payBillBtn: document.getElementById("payBillBtn"),
-  phase6Result: document.getElementById("phase6Result")
+  phase6Result: document.getElementById("phase6Result"),
+  archiveUsageMb: document.getElementById("archiveUsageMb"),
+  archiveQuotaMb: document.getElementById("archiveQuotaMb"),
+  archiveThresholdPct: document.getElementById("archiveThresholdPct"),
+  archiveUsageSource: document.getElementById("archiveUsageSource"),
+  saveDbUsageBtn: document.getElementById("saveDbUsageBtn"),
+  loadDbUsageBtn: document.getElementById("loadDbUsageBtn"),
+  archiveTriggerForce: document.getElementById("archiveTriggerForce"),
+  archiveTriggerLimit: document.getElementById("archiveTriggerLimit"),
+  runArchiveTriggerCheckBtn: document.getElementById("runArchiveTriggerCheckBtn"),
+  archiveIndexCaseNo: document.getElementById("archiveIndexCaseNo"),
+  archiveIndexPhone: document.getElementById("archiveIndexPhone"),
+  archiveIndexCustomerName: document.getElementById("archiveIndexCustomerName"),
+  archiveIndexRestoreStatus: document.getElementById("archiveIndexRestoreStatus"),
+  loadArchiveIndexBtn: document.getElementById("loadArchiveIndexBtn"),
+  archiveRestoreId: document.getElementById("archiveRestoreId"),
+  restoreArchiveBtn: document.getElementById("restoreArchiveBtn"),
+  archiveAdminResult: document.getElementById("archiveAdminResult"),
+  analyticsDays: document.getElementById("analyticsDays"),
+  analyticsTimeoutMs: document.getElementById("analyticsTimeoutMs"),
+  loadAnalyticsBtn: document.getElementById("loadAnalyticsBtn"),
+  clearAnalyticsBtn: document.getElementById("clearAnalyticsBtn"),
+  analyticsRoleChip: document.getElementById("analyticsRoleChip"),
+  analyticsFinanceChip: document.getElementById("analyticsFinanceChip"),
+  analyticsCaseKpi: document.getElementById("analyticsCaseKpi"),
+  analyticsInventoryKpi: document.getElementById("analyticsInventoryKpi"),
+  analyticsInventorySlices: document.getElementById("analyticsInventorySlices"),
+  analyticsExpenseKpi: document.getElementById("analyticsExpenseKpi"),
+  analyticsFinanceKpi: document.getElementById("analyticsFinanceKpi"),
+  analyticsFinanceTrend: document.getElementById("analyticsFinanceTrend"),
+  phase8Result: document.getElementById("phase8Result")
 };
 
 el.apiBase.value = storage.apiBase;
@@ -160,6 +190,10 @@ el.apiBase.value = storage.apiBase;
 const phase5State = {
   lastConsumptionId: "",
   selectedInventory: null
+};
+
+const appState = {
+  currentRole: ""
 };
 
 function setText(node, text) {
@@ -323,6 +357,153 @@ function setPhase6Result(payload) {
   el.phase6Result.textContent = JSON.stringify(payload, null, 2);
 }
 
+function setArchiveAdminResult(payload) {
+  if (!el.archiveAdminResult) return;
+  el.archiveAdminResult.textContent = JSON.stringify(payload, null, 2);
+}
+
+function setPhase8Result(payload) {
+  if (!el.phase8Result) return;
+  el.phase8Result.textContent = JSON.stringify(payload, null, 2);
+}
+
+function metricCard(label, value) {
+  return `<div class="metric-card"><b>${label}</b><span>${value}</span></div>`;
+}
+
+function buildSeriesPreview(rows, valueKey, formatter = (x) => x) {
+  if (!Array.isArray(rows) || rows.length === 0) return "none";
+  return rows
+    .slice(-3)
+    .map((row) => `${row.business_date_local || "NA"}: ${formatter(row[valueKey] ?? 0)}`)
+    .join(" | ");
+}
+
+function renderAnalyticsOverview(payload = {}) {
+  const data = payload.data || {};
+  const role = data.role || appState.currentRole || "NA";
+  const finance = data.finance || {};
+  const caseKpi = data.case_followup_kpis || {};
+  const inventory = data.inventory_trend || {};
+  const expenseTrend = data.expense_trend || {};
+
+  if (el.analyticsRoleChip) el.analyticsRoleChip.textContent = role;
+  if (el.analyticsFinanceChip) el.analyticsFinanceChip.textContent = finance.visibility || "hidden";
+
+  if (el.analyticsCaseKpi) {
+    el.analyticsCaseKpi.innerHTML = [
+      metricCard("Received Cases", caseKpi.received_cases ?? 0),
+      metricCard("Delivered Items", caseKpi.delivered_items ?? 0),
+      metricCard("Pending Approvals", caseKpi.pending_approvals ?? 0),
+      metricCard("Pending Pickups", caseKpi.pending_pickups ?? 0),
+      metricCard("Overdue Follow-ups", caseKpi.overdue_followups ?? 0),
+      metricCard("Business Date", data.business_date_local || "NA")
+    ].join("");
+  }
+
+  if (el.analyticsInventoryKpi) {
+    const topItems = (inventory.top_consumed_items || [])
+      .map((row) => `${row.item_name || row.sku || row.inventory_item_id || "unknown"}: ${row.consumed_qty}`)
+      .slice(0, 3)
+      .join(" | ") || "none";
+
+    el.analyticsInventoryKpi.innerHTML = [
+      metricCard("Consumption Events", inventory.consumption_events ?? 0),
+      metricCard("Consumed Qty Total", inventory.consumed_qty_total ?? 0),
+      metricCard("Consumed Cost (paise)", inventory.consumed_cost_total_paise ?? 0),
+      metricCard("Top Consumed", topItems)
+    ].join("");
+  }
+
+  if (el.analyticsInventorySlices) {
+    const daily = inventory.daily_consumption || [];
+    const hottestDay = [...daily].sort((a, b) => (b.consumed_qty_total || 0) - (a.consumed_qty_total || 0))[0] || null;
+
+    el.analyticsInventorySlices.innerHTML = [
+      metricCard("Daily Points", daily.length),
+      metricCard("Latest 3 Days Qty", buildSeriesPreview(daily, "consumed_qty_total")),
+      metricCard("Latest 3 Days Cost", buildSeriesPreview(daily, "consumed_cost_total_paise")),
+      metricCard("Peak Day", hottestDay ? `${hottestDay.business_date_local}: ${hottestDay.consumed_qty_total}` : "NA")
+    ].join("");
+  }
+
+  if (el.analyticsExpenseKpi) {
+    const byCategory = expenseTrend.by_category_paise || {};
+    const topCategory = Object.keys(byCategory)
+      .sort((a, b) => (byCategory[b] || 0) - (byCategory[a] || 0))[0] || "NA";
+
+    el.analyticsExpenseKpi.innerHTML = [
+      metricCard("Total Expenses (paise)", expenseTrend.expenses_total_paise ?? 0),
+      metricCard("Top Expense Category", topCategory),
+      metricCard("Analytics Window (days)", data.window_days ?? "NA")
+    ].join("");
+  }
+
+  if (el.analyticsFinanceKpi) {
+    if (finance.visibility === "full") {
+      el.analyticsFinanceKpi.innerHTML = [
+        metricCard("Recognized Revenue (paise)", finance.recognized_revenue_paise ?? 0),
+        metricCard("Credit Notes (paise)", finance.credit_notes_paise ?? 0),
+        metricCard("Expenses (paise)", finance.expenses_paise ?? 0),
+        metricCard("Net After Expenses (paise)", finance.net_after_expenses_paise ?? 0)
+      ].join("");
+    } else if (finance.visibility === "restricted") {
+      el.analyticsFinanceKpi.innerHTML = [
+        metricCard("Visibility", "Restricted"),
+        metricCard("Expenses (paise)", finance.expenses_paise ?? "hidden"),
+        metricCard("Note", finance.notes || "Finance fields are restricted for this role")
+      ].join("");
+    } else {
+      el.analyticsFinanceKpi.innerHTML = [
+        metricCard("Visibility", "Hidden"),
+        metricCard("Note", "Ops-only view for current role")
+      ].join("");
+    }
+  }
+
+  if (el.analyticsFinanceTrend) {
+    const expenseTop = (expenseTrend.by_category_top || [])
+      .map((row) => `${row.category}: ${row.total_paise}`)
+      .slice(0, 3)
+      .join(" | ") || "none";
+
+    if (finance.visibility === "full") {
+      const netDaily = finance.net_daily_after_expenses_paise || [];
+      el.analyticsFinanceTrend.innerHTML = [
+        metricCard("Top Expense Categories", expenseTop),
+        metricCard("Revenue Daily (3)", buildSeriesPreview(finance.revenue_daily_paise || [], "recognized_revenue_paise")),
+        metricCard("Credit Daily (3)", buildSeriesPreview(finance.credit_notes_daily_paise || [], "credit_notes_paise")),
+        metricCard("Net Daily After Expenses (3)", buildSeriesPreview(netDaily, "net_after_expenses_paise"))
+      ].join("");
+    } else if (finance.visibility === "restricted") {
+      const dailyExpense = finance.daily_expense_paise || expenseTrend.daily_expense_paise || [];
+      el.analyticsFinanceTrend.innerHTML = [
+        metricCard("Top Expense Categories", expenseTop),
+        metricCard("Daily Expense (3)", buildSeriesPreview(dailyExpense, "amount_paise")),
+        metricCard("Visibility", "Restricted"),
+        metricCard("Note", finance.notes || "Finance detail is restricted")
+      ].join("");
+    } else {
+      el.analyticsFinanceTrend.innerHTML = [
+        metricCard("Visibility", "Hidden"),
+        metricCard("Note", "No finance trend for current role")
+      ].join("");
+    }
+  }
+}
+
+function clearAnalyticsOverview() {
+  if (el.analyticsRoleChip) el.analyticsRoleChip.textContent = "NA";
+  if (el.analyticsFinanceChip) el.analyticsFinanceChip.textContent = "NA";
+  if (el.analyticsCaseKpi) el.analyticsCaseKpi.innerHTML = "";
+  if (el.analyticsInventoryKpi) el.analyticsInventoryKpi.innerHTML = "";
+  if (el.analyticsInventorySlices) el.analyticsInventorySlices.innerHTML = "";
+  if (el.analyticsExpenseKpi) el.analyticsExpenseKpi.innerHTML = "";
+  if (el.analyticsFinanceKpi) el.analyticsFinanceKpi.innerHTML = "";
+  if (el.analyticsFinanceTrend) el.analyticsFinanceTrend.innerHTML = "";
+  setPhase8Result({ action: "clear_analytics" });
+}
+
 function setPhase5StockWarning(message, tone = "") {
   if (!el.phase5StockWarning) return;
   el.phase5StockWarning.textContent = message || "";
@@ -397,14 +578,17 @@ async function api(path, options = {}) {
 
 async function loadMe() {
   if (!storage.token) {
+    appState.currentRole = "";
     setText(el.whoami, "Not logged in");
     return;
   }
   try {
     const result = await api("/v1/auth/me", { method: "GET" });
+    appState.currentRole = result?.data?.role || "";
     setText(el.whoami, `Logged in: ${result.data.full_name} (${result.data.role})`);
   } catch (error) {
     storage.token = "";
+    appState.currentRole = "";
     setText(el.whoami, `Session invalid: ${error.message}`);
   }
 }
@@ -514,7 +698,25 @@ el.loginBtn.addEventListener("click", async () => {
 
 el.logoutBtn.addEventListener("click", () => {
   storage.token = "";
+  appState.currentRole = "";
   setText(el.whoami, "Logged out");
+  clearAnalyticsOverview();
+});
+
+el.loadAnalyticsBtn?.addEventListener("click", async () => {
+  try {
+    const days = Math.max(1, toIntOrZero(el.analyticsDays.value || "30"));
+    const timeoutMs = Math.max(1000, toIntOrZero(el.analyticsTimeoutMs.value || "9000"));
+    const result = await api(`/v1/analytics/overview?days=${days}&query_timeout_ms=${timeoutMs}`, { method: "GET" });
+    renderAnalyticsOverview(result);
+    setPhase8Result({ action: "load_analytics_overview", ...result });
+  } catch (error) {
+    setPhase8Result({ action: "load_analytics_overview", error: error.message });
+  }
+});
+
+el.clearAnalyticsBtn?.addEventListener("click", () => {
+  clearAnalyticsOverview();
 });
 
 el.createCaseBtn.addEventListener("click", async () => {
@@ -940,6 +1142,102 @@ el.payBillBtn?.addEventListener("click", async () => {
     setPhase6Result({ action: "pay_recurring_bill", ...result });
   } catch (error) {
     setPhase6Result({ action: "pay_recurring_bill", error: error.message });
+  }
+});
+
+el.saveDbUsageBtn?.addEventListener("click", async () => {
+  try {
+    const payload = {
+      usage_mb: Number(el.archiveUsageMb.value),
+      quota_mb: Number(el.archiveQuotaMb.value),
+      threshold_pct: Number(el.archiveThresholdPct.value),
+      source: el.archiveUsageSource.value.trim() || "ui-manual",
+      details_json: {
+        source: "archive-admin-ui"
+      }
+    };
+
+    const result = await api("/v1/admin/db-usage", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+
+    setArchiveAdminResult({ action: "save_db_usage", ...result });
+  } catch (error) {
+    setArchiveAdminResult({ action: "save_db_usage", error: error.message });
+  }
+});
+
+el.loadDbUsageBtn?.addEventListener("click", async () => {
+  try {
+    const result = await api("/v1/admin/db-usage", { method: "GET" });
+    const usage = result?.data;
+    if (usage?.usage_mb !== null && usage?.usage_mb !== undefined) {
+      el.archiveUsageMb.value = String(usage.usage_mb);
+    }
+    if (usage?.quota_mb !== null && usage?.quota_mb !== undefined) {
+      el.archiveQuotaMb.value = String(usage.quota_mb);
+    }
+    if (usage?.threshold_pct !== null && usage?.threshold_pct !== undefined) {
+      el.archiveThresholdPct.value = String(usage.threshold_pct);
+    }
+    setArchiveAdminResult({ action: "load_db_usage", ...result });
+  } catch (error) {
+    setArchiveAdminResult({ action: "load_db_usage", error: error.message });
+  }
+});
+
+el.runArchiveTriggerCheckBtn?.addEventListener("click", async () => {
+  try {
+    const payload = {
+      force: toBool(el.archiveTriggerForce.value),
+      limit: Math.max(1, toIntOrZero(el.archiveTriggerLimit.value || "10"))
+    };
+    const result = await api("/v1/admin/archive/trigger-check", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    setArchiveAdminResult({ action: "archive_trigger_check", ...result });
+  } catch (error) {
+    setArchiveAdminResult({ action: "archive_trigger_check", error: error.message });
+  }
+});
+
+el.loadArchiveIndexBtn?.addEventListener("click", async () => {
+  try {
+    const params = new URLSearchParams();
+    if (el.archiveIndexCaseNo.value.trim()) params.set("case_no", el.archiveIndexCaseNo.value.trim());
+    if (el.archiveIndexPhone.value.trim()) params.set("phone", el.archiveIndexPhone.value.trim());
+    if (el.archiveIndexCustomerName.value.trim()) params.set("customer_name", el.archiveIndexCustomerName.value.trim());
+    if (el.archiveIndexRestoreStatus.value.trim()) params.set("restore_status", el.archiveIndexRestoreStatus.value.trim());
+    params.set("limit", "20");
+
+    const result = await api(`/v1/admin/archive-index?${params.toString()}`, { method: "GET" });
+    const firstArchiveId = result?.data?.[0]?.id;
+    if (!el.archiveRestoreId.value.trim() && firstArchiveId) {
+      el.archiveRestoreId.value = firstArchiveId;
+    }
+    setArchiveAdminResult({ action: "load_archive_index", ...result });
+  } catch (error) {
+    setArchiveAdminResult({ action: "load_archive_index", error: error.message });
+  }
+});
+
+el.restoreArchiveBtn?.addEventListener("click", async () => {
+  try {
+    const archiveId = el.archiveRestoreId.value.trim();
+    if (!archiveId) {
+      setArchiveAdminResult({ action: "restore_archive", error: "Provide archive_id" });
+      return;
+    }
+
+    const result = await api(`/v1/admin/archive/restore/${archiveId}`, {
+      method: "POST",
+      body: JSON.stringify({})
+    });
+    setArchiveAdminResult({ action: "restore_archive", ...result });
+  } catch (error) {
+    setArchiveAdminResult({ action: "restore_archive", error: error.message });
   }
 });
 

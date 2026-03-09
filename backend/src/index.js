@@ -4,6 +4,7 @@ const loginAttempts = new Map();
 const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const LOGIN_MAX_ATTEMPTS = 5;
 const LOGIN_LOCK_MS = 15 * 60 * 1000;
+const LIST_QUERY_TIMEOUT_MS = 7000;
 
 const ITEM_STATUS_TRANSITIONS = {
   Received: ["Diagnosis", "Cancelled"],
@@ -29,7 +30,7 @@ function getSupabaseConfig(env) {
   };
 }
 
-function json(status, payload) {
+function baseJson(status, payload) {
   return Response.json(payload, {
     status,
     headers: {
@@ -38,6 +39,39 @@ function json(status, payload) {
       "Access-Control-Allow-Headers": "Authorization, Content-Type"
     }
   });
+}
+
+function json(status, payload) {
+  return baseJson(status, payload);
+}
+
+async function withTimeout(promise, timeoutMs, timeoutCode = "QUERY_TIMEOUT") {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          const err = new Error(timeoutCode);
+          err.code = timeoutCode;
+          reject(err);
+        }, timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function percentile(sortedNumbers, p) {
+  if (!Array.isArray(sortedNumbers) || sortedNumbers.length === 0) return null;
+  if (sortedNumbers.length === 1) return sortedNumbers[0];
+  const rank = (p / 100) * (sortedNumbers.length - 1);
+  const low = Math.floor(rank);
+  const high = Math.ceil(rank);
+  if (low === high) return sortedNumbers[low];
+  const weight = rank - low;
+  return Number((sortedNumbers[low] + (sortedNumbers[high] - sortedNumbers[low]) * weight).toFixed(2));
 }
 
 function getIp(request) {
@@ -605,9 +639,53 @@ function getConfigStatus(env) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const configStatus = getConfigStatus(env);
+    const requestStartedAt = Date.now();
+    let telemetryClient;
+    let telemetryClientInit = false;
+
+    const getTelemetryClient = () => {
+      if (telemetryClientInit) return telemetryClient;
+      telemetryClientInit = true;
+      telemetryClient = getServiceClient(env);
+      return telemetryClient;
+    };
+
+    const json = (status, payload) => {
+      const response = baseJson(status, payload);
+
+      if (url.pathname.startsWith("/v1")) {
+        const client = getTelemetryClient();
+        if (client) {
+          const latencyMs = Math.max(0, Date.now() - requestStartedAt);
+          const responseCode = ensureNonEmptyString(payload?.code) ? payload.code.trim() : null;
+          const isError = status >= 400 || (responseCode !== null && responseCode !== "OK");
+
+          const logPromise = client
+            .from("api_request_logs")
+            .insert({
+              observed_at_utc: new Date().toISOString(),
+              method: request.method,
+              path: url.pathname,
+              status_code: status,
+              response_code: responseCode,
+              latency_ms: latencyMs,
+              is_error: isError,
+              source: "worker"
+            })
+            .then(() => undefined)
+            .catch(() => undefined);
+
+          if (ctx && typeof ctx.waitUntil === "function") {
+            ctx.waitUntil(logPromise);
+          }
+        }
+      }
+
+      return response;
+    };
 
     if (request.method === "OPTIONS") {
       return new Response(null, {
@@ -852,40 +930,52 @@ export default {
         .range(offset, offset + limit - 1);
 
       if (caseNo) query = query.eq("case_no", caseNo);
-      if (phone) {
-        const { data: matchingCustomers, error: customerErr } = await auth.serviceClient
-          .from("customers")
-          .select("id")
-          .eq("tenant_id", auth.user.tenantId)
-          .eq("phone", phone)
-          .limit(200);
+      try {
+        if (phone) {
+          const customerResult = await withTimeout(
+            auth.serviceClient
+              .from("customers")
+              .select("id")
+              .eq("tenant_id", auth.user.tenantId)
+              .eq("phone", phone)
+              .limit(200),
+            LIST_QUERY_TIMEOUT_MS,
+            "CASE_SEARCH_TIMEOUT"
+          );
 
-        if (customerErr) {
-          return json(500, { code: "CASE_SEARCH_FAILED", message: "Unable to resolve phone filter" });
+          const matchingCustomers = customerResult.data;
+          const customerErr = customerResult.error;
+          if (customerErr) {
+            return json(500, { code: "CASE_SEARCH_FAILED", message: "Unable to resolve phone filter" });
+          }
+
+          const customerIds = (matchingCustomers || []).map((row) => row.id);
+          if (customerIds.length === 0) {
+            return json(200, {
+              code: "OK",
+              data: [],
+              pagination: { limit, offset }
+            });
+          }
+
+          query = query.in("customer_id", customerIds);
         }
 
-        const customerIds = (matchingCustomers || []).map((row) => row.id);
-        if (customerIds.length === 0) {
-          return json(200, {
-            code: "OK",
-            data: [],
-            pagination: { limit, offset }
-          });
+        const result = await withTimeout(query, LIST_QUERY_TIMEOUT_MS, "CASE_SEARCH_TIMEOUT");
+        const data = result.data;
+        const error = result.error;
+        if (error) {
+          return json(500, { code: "CASE_SEARCH_FAILED", message: "Unable to search cases" });
         }
 
-        query = query.in("customer_id", customerIds);
+        return json(200, {
+          code: "OK",
+          data: data || [],
+          pagination: { limit, offset }
+        });
+      } catch {
+        return json(504, { code: "CASE_SEARCH_TIMEOUT", message: "Case search query timed out" });
       }
-
-      const { data, error } = await query;
-      if (error) {
-        return json(500, { code: "CASE_SEARCH_FAILED", message: "Unable to search cases" });
-      }
-
-      return json(200, {
-        code: "OK",
-        data: data || [],
-        pagination: { limit, offset }
-      });
     }
 
     if (request.method === "GET" && /^\/v1\/cases\/[^/]+$/.test(url.pathname)) {
@@ -954,15 +1044,22 @@ export default {
       }
 
       const caseId = url.pathname.split("/")[3];
-      const { data, error } = await auth.serviceClient
-        .from("case_items")
-        .select("id, case_id, line_no, item_category, brand, model, serial_no, reported_issue, diagnosis_notes, item_status, promised_date_local, ready_at_utc, delivered_at_utc")
-        .eq("tenant_id", auth.user.tenantId)
-        .eq("case_id", caseId)
-        .order("line_no", { ascending: true });
-
-      if (error) return json(500, { code: "CASE_ITEMS_FETCH_FAILED", message: "Unable to fetch case items" });
-      return json(200, { code: "OK", data: data || [] });
+      try {
+        const result = await withTimeout(
+          auth.serviceClient
+            .from("case_items")
+            .select("id, case_id, line_no, item_category, brand, model, serial_no, reported_issue, diagnosis_notes, item_status, promised_date_local, ready_at_utc, delivered_at_utc")
+            .eq("tenant_id", auth.user.tenantId)
+            .eq("case_id", caseId)
+            .order("line_no", { ascending: true }),
+          LIST_QUERY_TIMEOUT_MS,
+          "CASE_ITEMS_QUERY_TIMEOUT"
+        );
+        if (result.error) return json(500, { code: "CASE_ITEMS_FETCH_FAILED", message: "Unable to fetch case items" });
+        return json(200, { code: "OK", data: result.data || [] });
+      } catch {
+        return json(504, { code: "CASE_ITEMS_QUERY_TIMEOUT", message: "Case items query timed out" });
+      }
     }
 
     if (request.method === "GET" && /^\/v1\/cases\/[^/]+\/consumption$/.test(url.pathname)) {
@@ -985,16 +1082,20 @@ export default {
       const caseItemId = (url.searchParams.get("case_item_id") || "").trim();
       if (caseItemId) query = query.eq("case_item_id", caseItemId);
 
-      const { data, error } = await query;
-      if (error) {
-        return json(500, { code: "CASE_CONSUMPTION_FETCH_FAILED", message: "Unable to fetch case consumption" });
-      }
+      try {
+        const result = await withTimeout(query, LIST_QUERY_TIMEOUT_MS, "CASE_CONSUMPTION_QUERY_TIMEOUT");
+        if (result.error) {
+          return json(500, { code: "CASE_CONSUMPTION_FETCH_FAILED", message: "Unable to fetch case consumption" });
+        }
 
-      return json(200, {
-        code: "OK",
-        data: data || [],
-        pagination: { limit, offset }
-      });
+        return json(200, {
+          code: "OK",
+          data: result.data || [],
+          pagination: { limit, offset }
+        });
+      } catch {
+        return json(504, { code: "CASE_CONSUMPTION_QUERY_TIMEOUT", message: "Case consumption query timed out" });
+      }
     }
 
     if (request.method === "POST" && /^\/v1\/cases\/[^/]+\/consumption$/.test(url.pathname)) {
@@ -1206,16 +1307,24 @@ export default {
 
       const caseId = url.pathname.split("/")[3];
       const { limit, offset } = getPagination(url);
-      const { data, error } = await auth.serviceClient
-        .from("item_estimates")
-        .select("id, case_item_id, estimate_version_no, labor_amount_paise, spare_amount_paise, other_amount_paise, discount_amount_paise, base_bill_amount_paise, gst_rate_bps, gst_amount_paise, invoice_total_paise, estimate_status, decision, invoice_state, is_financial_locked, finalized_at_utc, finalized_by, override_count, created_at, updated_at, case_items!inner(id, case_id, line_no, item_status)")
-        .eq("tenant_id", auth.user.tenantId)
-        .eq("case_items.case_id", caseId)
-        .order("created_at", { ascending: false })
-        .range(offset, offset + limit - 1);
+      try {
+        const result = await withTimeout(
+          auth.serviceClient
+            .from("item_estimates")
+            .select("id, case_item_id, estimate_version_no, labor_amount_paise, spare_amount_paise, other_amount_paise, discount_amount_paise, base_bill_amount_paise, gst_rate_bps, gst_amount_paise, invoice_total_paise, estimate_status, decision, invoice_state, is_financial_locked, finalized_at_utc, finalized_by, override_count, created_at, updated_at, case_items!inner(id, case_id, line_no, item_status)")
+            .eq("tenant_id", auth.user.tenantId)
+            .eq("case_items.case_id", caseId)
+            .order("created_at", { ascending: false })
+            .range(offset, offset + limit - 1),
+          LIST_QUERY_TIMEOUT_MS,
+          "ESTIMATE_LIST_QUERY_TIMEOUT"
+        );
 
-      if (error) return json(500, { code: "ESTIMATE_FETCH_FAILED", message: "Unable to fetch case estimates" });
-      return json(200, { code: "OK", data: data || [], pagination: { limit, offset } });
+        if (result.error) return json(500, { code: "ESTIMATE_FETCH_FAILED", message: "Unable to fetch case estimates" });
+        return json(200, { code: "OK", data: result.data || [], pagination: { limit, offset } });
+      } catch {
+        return json(504, { code: "ESTIMATE_LIST_QUERY_TIMEOUT", message: "Case estimates query timed out" });
+      }
     }
 
     if (request.method === "GET" && url.pathname === "/v1/inventory/items") {
@@ -1244,12 +1353,16 @@ export default {
         query = query.filter("current_stock_qty", "lte", "reorder_level_qty");
       }
 
-      const { data, error } = await query;
-      if (error) {
-        return json(500, { code: "INVENTORY_FETCH_FAILED", message: "Unable to fetch inventory items" });
-      }
+      try {
+        const result = await withTimeout(query, LIST_QUERY_TIMEOUT_MS, "INVENTORY_ITEMS_QUERY_TIMEOUT");
+        if (result.error) {
+          return json(500, { code: "INVENTORY_FETCH_FAILED", message: "Unable to fetch inventory items" });
+        }
 
-      return json(200, { code: "OK", data: data || [], pagination: { limit, offset } });
+        return json(200, { code: "OK", data: result.data || [], pagination: { limit, offset } });
+      } catch {
+        return json(504, { code: "INVENTORY_ITEMS_QUERY_TIMEOUT", message: "Inventory list query timed out" });
+      }
     }
 
     if (request.method === "POST" && url.pathname === "/v1/inventory/items") {
@@ -1418,10 +1531,14 @@ export default {
       if (refEntity) query = query.eq("ref_entity", refEntity);
       if (refId) query = query.eq("ref_id", refId);
 
-      const { data, error } = await query;
-      if (error) return json(500, { code: "INVENTORY_LEDGER_FETCH_FAILED", message: "Unable to fetch stock ledger" });
+      try {
+        const result = await withTimeout(query, LIST_QUERY_TIMEOUT_MS, "INVENTORY_LEDGER_QUERY_TIMEOUT");
+        if (result.error) return json(500, { code: "INVENTORY_LEDGER_FETCH_FAILED", message: "Unable to fetch stock ledger" });
 
-      return json(200, { code: "OK", data: data || [], pagination: { limit, offset } });
+        return json(200, { code: "OK", data: result.data || [], pagination: { limit, offset } });
+      } catch {
+        return json(504, { code: "INVENTORY_LEDGER_QUERY_TIMEOUT", message: "Inventory ledger query timed out" });
+      }
     }
 
     if (request.method === "GET" && /^\/v1\/estimates\/[^/]+$/.test(url.pathname)) {
@@ -1950,10 +2067,14 @@ export default {
       if (isValidDateLocal(toDate)) query = query.lte("expense_date_local", toDate);
       if (category) query = query.eq("category", category);
 
-      const { data, error } = await query;
-      if (error) return json(500, { code: "EXPENSES_FETCH_FAILED", message: "Unable to fetch expenses" });
+      try {
+        const result = await withTimeout(query, LIST_QUERY_TIMEOUT_MS, "EXPENSES_QUERY_TIMEOUT");
+        if (result.error) return json(500, { code: "EXPENSES_FETCH_FAILED", message: "Unable to fetch expenses" });
 
-      return json(200, { code: "OK", data: data || [], pagination: { limit, offset } });
+        return json(200, { code: "OK", data: result.data || [], pagination: { limit, offset } });
+      } catch {
+        return json(504, { code: "EXPENSES_QUERY_TIMEOUT", message: "Expenses query timed out" });
+      }
     }
 
     if (request.method === "POST" && url.pathname === "/v1/expenses") {
@@ -2024,17 +2145,27 @@ export default {
       const businessDate = getBusinessDateInTimezone(env.DEFAULT_TIMEZONE || "Asia/Kolkata");
       const reminderFilter = (url.searchParams.get("reminder_state") || "").trim();
 
-      const { data, error } = await auth.serviceClient
-        .from("recurring_bills")
-        .select("id, bill_name, category, amount_paise, due_date, frequency_days, reminder_offsets_json, last_paid_at_utc, last_paid_amount_paise, last_payment_note, is_active, updated_at")
-        .eq("tenant_id", auth.user.tenantId)
-        .eq("is_active", true)
-        .order("due_date", { ascending: true })
-        .range(offset, offset + limit - 1);
+      let rows;
+      try {
+        const result = await withTimeout(
+          auth.serviceClient
+            .from("recurring_bills")
+            .select("id, bill_name, category, amount_paise, due_date, frequency_days, reminder_offsets_json, last_paid_at_utc, last_paid_amount_paise, last_payment_note, is_active, updated_at")
+            .eq("tenant_id", auth.user.tenantId)
+            .eq("is_active", true)
+            .order("due_date", { ascending: true })
+            .range(offset, offset + limit - 1),
+          LIST_QUERY_TIMEOUT_MS,
+          "RECURRING_BILLS_QUERY_TIMEOUT"
+        );
 
-      if (error) return json(500, { code: "RECURRING_BILLS_FETCH_FAILED", message: "Unable to fetch recurring bills" });
+        if (result.error) return json(500, { code: "RECURRING_BILLS_FETCH_FAILED", message: "Unable to fetch recurring bills" });
+        rows = result.data || [];
+      } catch {
+        return json(504, { code: "RECURRING_BILLS_QUERY_TIMEOUT", message: "Recurring bills query timed out" });
+      }
 
-      const enriched = (data || []).map((row) => ({
+      const enriched = rows.map((row) => ({
         ...row,
         reminder_state: getBillReminderState(row.due_date, businessDate)
       }));
@@ -2299,14 +2430,26 @@ export default {
         statuses = ["WaitingApproval"];
       }
 
-      const { data, error } = await auth.serviceClient
-        .from("case_items")
-        .select("id, case_id, line_no, item_status, updated_at, cases!inner(id, case_no, followup_due_at_utc, followup_notes, followup_reminder_state, followup_last_contact_at_utc, customers(name, phone))")
-        .eq("tenant_id", auth.user.tenantId)
-        .in("item_status", statuses)
-        .eq("is_active", true)
-        .order("updated_at", { ascending: false })
-        .range(offset, offset + limit - 1);
+      let data;
+      let error;
+      try {
+        const result = await withTimeout(
+          auth.serviceClient
+            .from("case_items")
+            .select("id, case_id, line_no, item_status, updated_at, cases!inner(id, case_no, followup_due_at_utc, followup_notes, followup_reminder_state, followup_last_contact_at_utc, customers(name, phone))")
+            .eq("tenant_id", auth.user.tenantId)
+            .in("item_status", statuses)
+            .eq("is_active", true)
+            .order("updated_at", { ascending: false })
+            .range(offset, offset + limit - 1),
+          7000,
+          "FOLLOWUP_QUERY_TIMEOUT"
+        );
+        data = result.data;
+        error = result.error;
+      } catch (timeoutErr) {
+        return json(504, { code: "FOLLOWUP_QUERY_TIMEOUT", message: "Follow-up query timed out" });
+      }
 
       if (error) {
         return json(500, { code: "FOLLOWUP_FETCH_FAILED", message: "Unable to fetch follow-up queue" });
@@ -2459,14 +2602,22 @@ export default {
         return json(403, { code: "FORBIDDEN", message: "Admin/IT role required" });
       }
 
-      const { data, error } = await auth.serviceClient
-        .from("ops_job_status")
-        .select("id, tenant_id, job_name, status, last_run_at_utc, last_success_at_utc, last_error_message, details_json, updated_at, updated_by")
-        .eq("tenant_id", auth.user.tenantId)
-        .order("updated_at", { ascending: false });
+      try {
+        const result = await withTimeout(
+          auth.serviceClient
+            .from("ops_job_status")
+            .select("id, tenant_id, job_name, status, last_run_at_utc, last_success_at_utc, last_error_message, details_json, updated_at, updated_by")
+            .eq("tenant_id", auth.user.tenantId)
+            .order("updated_at", { ascending: false }),
+          LIST_QUERY_TIMEOUT_MS,
+          "OPS_STATUS_QUERY_TIMEOUT"
+        );
 
-      if (error) return json(500, { code: "OPS_STATUS_FETCH_FAILED", message: "Unable to fetch ops status" });
-      return json(200, { code: "OK", data: data || [] });
+        if (result.error) return json(500, { code: "OPS_STATUS_FETCH_FAILED", message: "Unable to fetch ops status" });
+        return json(200, { code: "OK", data: result.data || [] });
+      } catch {
+        return json(504, { code: "OPS_STATUS_QUERY_TIMEOUT", message: "Ops status query timed out" });
+      }
     }
 
     if (request.method === "POST" && /^\/v1\/admin\/ops-status\/[^/]+$/.test(url.pathname)) {
@@ -2514,6 +2665,496 @@ export default {
 
       if (error) return json(500, { code: "OPS_STATUS_SAVE_FAILED", message: "Unable to save ops status" });
       return json(200, { code: "OK", message: "Ops status updated", data });
+    }
+
+    if (request.method === "GET" && url.pathname === "/v1/admin/metrics/summary") {
+      const auth = await requireAuth(request, env);
+      if (auth.error) return auth.error;
+      if (!requireRole(auth.user, ["Admin", "IT"])) {
+        return json(403, { code: "FORBIDDEN", message: "Admin/IT role required" });
+      }
+
+      const hours = Math.max(1, Math.min(168, toSafeInt(url.searchParams.get("hours"), 24)));
+      const logsLimit = Math.max(100, Math.min(5000, toSafeInt(url.searchParams.get("logs_limit"), 2000)));
+      const trendLimit = Math.max(5, Math.min(90, toSafeInt(url.searchParams.get("trend_limit"), 30)));
+      const queryTimeoutMs = Math.max(1000, Math.min(15000, toSafeInt(url.searchParams.get("query_timeout_ms"), 7000)));
+      const sinceIso = new Date(Date.now() - (hours * 60 * 60 * 1000)).toISOString();
+
+      let logs;
+      let opsRows;
+      let usageRows;
+
+      try {
+        const logsResult = await withTimeout(
+          auth.serviceClient
+            .from("api_request_logs")
+            .select("method, path, status_code, response_code, latency_ms, is_error, observed_at_utc")
+            .gte("observed_at_utc", sinceIso)
+            .order("observed_at_utc", { ascending: false })
+            .limit(logsLimit),
+          queryTimeoutMs,
+          "METRICS_QUERY_TIMEOUT"
+        );
+
+        const opsResult = await withTimeout(
+          auth.serviceClient
+            .from("ops_job_status")
+            .select("job_name, status, last_run_at_utc, last_success_at_utc, last_error_message, updated_at")
+            .eq("tenant_id", auth.user.tenantId)
+            .order("updated_at", { ascending: false }),
+          queryTimeoutMs,
+          "METRICS_QUERY_TIMEOUT"
+        );
+
+        const usageResult = await withTimeout(
+          auth.serviceClient
+            .from("db_usage_snapshots")
+            .select("id, observed_at_utc, usage_mb, quota_mb, utilization_pct, threshold_pct, is_triggered, source")
+            .eq("tenant_id", auth.user.tenantId)
+            .order("observed_at_utc", { ascending: false })
+            .limit(trendLimit),
+          queryTimeoutMs,
+          "METRICS_QUERY_TIMEOUT"
+        );
+
+        if (logsResult.error) {
+          return json(500, { code: "METRICS_FETCH_FAILED", message: "Unable to fetch request telemetry" });
+        }
+        if (opsResult.error) {
+          return json(500, { code: "METRICS_FETCH_FAILED", message: "Unable to fetch ops status telemetry" });
+        }
+        if (usageResult.error) {
+          return json(500, { code: "METRICS_FETCH_FAILED", message: "Unable to fetch DB usage trend" });
+        }
+
+        logs = logsResult.data || [];
+        opsRows = opsResult.data || [];
+        usageRows = usageResult.data || [];
+      } catch (error) {
+        const code = error?.code || error?.message || "METRICS_QUERY_TIMEOUT";
+        if (String(code).includes("TIMEOUT")) {
+          return json(504, {
+            code: "METRICS_QUERY_TIMEOUT",
+            message: `Metrics query exceeded timeout (${queryTimeoutMs} ms)`
+          });
+        }
+        return json(500, { code: "METRICS_FETCH_FAILED", message: "Unable to fetch metrics summary" });
+      }
+
+      const totalRequests = logs.length;
+      const errorRequests = logs.filter((row) => Boolean(row.is_error) || Number(row.status_code) >= 400).length;
+      const errorRatePct = totalRequests > 0
+        ? Number(((errorRequests / totalRequests) * 100).toFixed(2))
+        : 0;
+
+      const sortedLatencies = logs
+        .map((row) => Number(row.latency_ms))
+        .filter((value) => Number.isFinite(value) && value >= 0)
+        .sort((a, b) => a - b);
+
+      const p50 = percentile(sortedLatencies, 50);
+      const p95 = percentile(sortedLatencies, 95);
+
+      const failedOpsRows = opsRows.filter((row) => {
+        const jobName = String(row.job_name || "").toLowerCase();
+        const status = String(row.status || "").toLowerCase();
+        const isTrackedJob = jobName.includes("backup") || jobName.includes("archive");
+        const isFailure = status.includes("fail") || status.includes("error");
+        return isTrackedJob && isFailure;
+      });
+
+      return json(200, {
+        code: "OK",
+        data: {
+          window_hours: hours,
+          request_volume: {
+            total_requests: totalRequests,
+            error_requests: errorRequests,
+            error_rate_pct: errorRatePct
+          },
+          latency_ms: {
+            p50,
+            p95,
+            sample_size: sortedLatencies.length
+          },
+          failed_jobs: {
+            total_failed_backup_archive_jobs: failedOpsRows.length,
+            rows: failedOpsRows
+          },
+          db_usage_trend: usageRows
+        }
+      });
+    }
+
+    if (request.method === "GET" && url.pathname === "/v1/analytics/overview") {
+      const auth = await requireAuth(request, env);
+      if (auth.error) return auth.error;
+      if (!requireRole(auth.user, ["Admin", "IT", "Staff"])) {
+        return json(403, { code: "FORBIDDEN", message: "Role not allowed" });
+      }
+
+      const days = Math.max(1, Math.min(180, toSafeInt(url.searchParams.get("days"), 30)));
+      const analyticsBaseQueryTimeoutMs = Math.max(1200, Math.min(12000, toSafeInt(url.searchParams.get("query_timeout_ms"), 6500)));
+      const rowLimitRequested = toSafeInt(url.searchParams.get("row_limit"), 800);
+      const rowLimit = Math.max(50, Math.min(1500, rowLimitRequested));
+
+      const caseSliceTimeoutMs = Math.max(800, Math.min(12000, toSafeInt(url.searchParams.get("case_slice_timeout_ms"), analyticsBaseQueryTimeoutMs)));
+      const inventorySliceTimeoutMs = Math.max(800, Math.min(12000, toSafeInt(url.searchParams.get("inventory_slice_timeout_ms"), analyticsBaseQueryTimeoutMs)));
+      const expenseSliceTimeoutMs = Math.max(800, Math.min(12000, toSafeInt(url.searchParams.get("expense_slice_timeout_ms"), analyticsBaseQueryTimeoutMs)));
+      const financeSliceTimeoutMs = Math.max(800, Math.min(12000, toSafeInt(url.searchParams.get("finance_slice_timeout_ms"), analyticsBaseQueryTimeoutMs)));
+
+      const nowIso = new Date().toISOString();
+      const sinceIso = new Date(Date.now() - (days * 24 * 60 * 60 * 1000)).toISOString();
+      const sinceBusinessDateLocal = getBusinessDateInTimezone(env.DEFAULT_TIMEZONE || "Asia/Kolkata", sinceIso);
+
+      let receivedCasesRows;
+      let deliveredItemsRows;
+      let pendingApprovalRows;
+      let pendingPickupRows;
+      let overdueFollowupRows;
+      let consumptionRows;
+      let expenseRows;
+      let estimateRows;
+      let creditRows;
+
+      try {
+        [
+          receivedCasesRows,
+          deliveredItemsRows,
+          pendingApprovalRows,
+          pendingPickupRows,
+          overdueFollowupRows,
+          consumptionRows,
+          expenseRows,
+          estimateRows,
+          creditRows
+        ] = await Promise.all([
+          withTimeout(
+            auth.serviceClient
+              .from("cases")
+              .select("id")
+              .eq("tenant_id", auth.user.tenantId)
+              .gte("created_at", sinceIso)
+              .limit(rowLimit),
+            caseSliceTimeoutMs,
+            "ANALYTICS_CASE_SLICE_TIMEOUT"
+          ),
+          withTimeout(
+            auth.serviceClient
+              .from("case_items")
+              .select("id")
+              .eq("tenant_id", auth.user.tenantId)
+              .eq("item_status", "Delivered")
+              .gte("delivered_at_utc", sinceIso)
+              .limit(rowLimit),
+            caseSliceTimeoutMs,
+            "ANALYTICS_CASE_SLICE_TIMEOUT"
+          ),
+          withTimeout(
+            auth.serviceClient
+              .from("case_items")
+              .select("id")
+              .eq("tenant_id", auth.user.tenantId)
+              .eq("item_status", "WaitingApproval")
+              .eq("is_active", true)
+              .limit(rowLimit),
+            caseSliceTimeoutMs,
+            "ANALYTICS_CASE_SLICE_TIMEOUT"
+          ),
+          withTimeout(
+            auth.serviceClient
+              .from("case_items")
+              .select("id")
+              .eq("tenant_id", auth.user.tenantId)
+              .in("item_status", ["Ready", "RejectedByCustomer"])
+              .eq("is_active", true)
+              .limit(rowLimit),
+            caseSliceTimeoutMs,
+            "ANALYTICS_CASE_SLICE_TIMEOUT"
+          ),
+          withTimeout(
+            auth.serviceClient
+              .from("cases")
+              .select("id")
+              .eq("tenant_id", auth.user.tenantId)
+              .eq("is_active", true)
+              .lt("followup_due_at_utc", nowIso)
+              .limit(rowLimit),
+            caseSliceTimeoutMs,
+            "ANALYTICS_CASE_SLICE_TIMEOUT"
+          ),
+          withTimeout(
+            auth.serviceClient
+              .from("case_spare_consumption")
+              .select("id, inventory_item_id, qty, line_cost_paise, consumed_at_utc, inventory_items(id, sku, item_name)")
+              .eq("tenant_id", auth.user.tenantId)
+              .gte("consumed_at_utc", sinceIso)
+              .limit(rowLimit),
+            inventorySliceTimeoutMs,
+            "ANALYTICS_INVENTORY_SLICE_TIMEOUT"
+          ),
+          withTimeout(
+            auth.serviceClient
+              .from("expenses")
+              .select("id, category, amount_paise, expense_date_local")
+              .eq("tenant_id", auth.user.tenantId)
+              .eq("is_active", true)
+              .gte("expense_date_local", sinceBusinessDateLocal)
+              .limit(rowLimit),
+            expenseSliceTimeoutMs,
+            "ANALYTICS_EXPENSE_SLICE_TIMEOUT"
+          ),
+          withTimeout(
+            auth.serviceClient
+              .from("item_estimates")
+              .select("id, invoice_total_paise, invoice_state, is_financial_locked, updated_at")
+              .eq("tenant_id", auth.user.tenantId)
+              .eq("is_financial_locked", true)
+              .gte("updated_at", sinceIso)
+              .limit(rowLimit),
+            financeSliceTimeoutMs,
+            "ANALYTICS_FINANCE_SLICE_TIMEOUT"
+          ),
+          withTimeout(
+            auth.serviceClient
+              .from("financial_credit_notes")
+              .select("id, credit_amount_paise, created_at")
+              .eq("tenant_id", auth.user.tenantId)
+              .gte("created_at", sinceIso)
+              .limit(rowLimit),
+            financeSliceTimeoutMs,
+            "ANALYTICS_FINANCE_SLICE_TIMEOUT"
+          )
+        ]);
+      } catch (error) {
+        const timeoutCode = String(error?.code || error?.message || "ANALYTICS_QUERY_TIMEOUT");
+        if (timeoutCode.includes("ANALYTICS_CASE_SLICE_TIMEOUT")) {
+          return json(504, { code: "ANALYTICS_CASE_SLICE_TIMEOUT", message: `Case/follow-up analytics slice timed out (${caseSliceTimeoutMs} ms)` });
+        }
+        if (timeoutCode.includes("ANALYTICS_INVENTORY_SLICE_TIMEOUT")) {
+          return json(504, { code: "ANALYTICS_INVENTORY_SLICE_TIMEOUT", message: `Inventory analytics slice timed out (${inventorySliceTimeoutMs} ms)` });
+        }
+        if (timeoutCode.includes("ANALYTICS_EXPENSE_SLICE_TIMEOUT")) {
+          return json(504, { code: "ANALYTICS_EXPENSE_SLICE_TIMEOUT", message: `Expense analytics slice timed out (${expenseSliceTimeoutMs} ms)` });
+        }
+        if (timeoutCode.includes("ANALYTICS_FINANCE_SLICE_TIMEOUT")) {
+          return json(504, { code: "ANALYTICS_FINANCE_SLICE_TIMEOUT", message: `Finance analytics slice timed out (${financeSliceTimeoutMs} ms)` });
+        }
+        return json(504, { code: "ANALYTICS_QUERY_TIMEOUT", message: "Analytics query timed out" });
+      }
+
+      const queryResults = [
+        receivedCasesRows,
+        deliveredItemsRows,
+        pendingApprovalRows,
+        pendingPickupRows,
+        overdueFollowupRows,
+        consumptionRows,
+        expenseRows,
+        estimateRows,
+        creditRows
+      ];
+
+      const hasQueryError = queryResults.some((result) => Boolean(result?.error));
+      if (hasQueryError) {
+        return json(500, { code: "ANALYTICS_FETCH_FAILED", message: "Unable to build analytics overview" });
+      }
+
+      const receivedCount = (receivedCasesRows.data || []).length;
+      const deliveredCount = (deliveredItemsRows.data || []).length;
+      const pendingApprovalCount = (pendingApprovalRows.data || []).length;
+      const pendingPickupCount = (pendingPickupRows.data || []).length;
+      const overdueFollowupCount = (overdueFollowupRows.data || []).length;
+
+      const expenseByCategory = {};
+      let expensesTotalPaise = 0;
+      for (const row of (expenseRows.data || [])) {
+        const category = ensureNonEmptyString(row.category) ? row.category : "uncategorized";
+        const amount = toSafeInt(row.amount_paise, 0);
+        expensesTotalPaise += amount;
+        expenseByCategory[category] = (expenseByCategory[category] || 0) + amount;
+      }
+
+      let totalConsumptionQty = 0;
+      let totalConsumptionCostPaise = 0;
+      const topItemsMap = new Map();
+      const inventoryDailyMap = new Map();
+      for (const row of (consumptionRows.data || [])) {
+        const qty = Number(row.qty || 0);
+        if (Number.isFinite(qty) && qty > 0) totalConsumptionQty += qty;
+
+        const lineCost = toSafeInt(row.line_cost_paise, 0);
+        if (lineCost > 0) totalConsumptionCostPaise += lineCost;
+
+        const itemObj = Array.isArray(row.inventory_items) ? (row.inventory_items[0] || {}) : (row.inventory_items || {});
+        const key = ensureNonEmptyString(row.inventory_item_id) ? row.inventory_item_id : "unknown";
+        const prev = topItemsMap.get(key) || {
+          inventory_item_id: row.inventory_item_id || null,
+          sku: itemObj.sku || null,
+          item_name: itemObj.item_name || null,
+          consumed_qty: 0
+        };
+        prev.consumed_qty += Number.isFinite(qty) ? qty : 0;
+        topItemsMap.set(key, prev);
+
+        const consumedDate = toIsoStringSafe(row.consumed_at_utc)?.slice(0, 10) || null;
+        if (consumedDate) {
+          const dayRow = inventoryDailyMap.get(consumedDate) || {
+            business_date_local: consumedDate,
+            consumption_events: 0,
+            consumed_qty_total: 0,
+            consumed_cost_total_paise: 0
+          };
+          dayRow.consumption_events += 1;
+          dayRow.consumed_qty_total += Number.isFinite(qty) ? qty : 0;
+          dayRow.consumed_cost_total_paise += lineCost;
+          inventoryDailyMap.set(consumedDate, dayRow);
+        }
+      }
+
+      const topConsumedItems = Array.from(topItemsMap.values())
+        .sort((a, b) => b.consumed_qty - a.consumed_qty)
+        .slice(0, 5);
+
+      const inventoryDailyConsumption = Array.from(inventoryDailyMap.values())
+        .sort((a, b) => (a.business_date_local < b.business_date_local ? -1 : 1))
+        .map((row) => ({
+          ...row,
+          consumed_qty_total: Number(row.consumed_qty_total.toFixed(2))
+        }));
+
+      let finalizedRevenuePaise = 0;
+      const revenueDailyMap = new Map();
+      for (const row of (estimateRows.data || [])) {
+        const state = String(row.invoice_state || "");
+        if (state === "FINALIZED" || state === "REVERSED") {
+          const revenue = toSafeInt(row.invoice_total_paise, 0);
+          finalizedRevenuePaise += revenue;
+
+          const estimateDate = toIsoStringSafe(row.updated_at)?.slice(0, 10) || null;
+          if (estimateDate) {
+            revenueDailyMap.set(estimateDate, (revenueDailyMap.get(estimateDate) || 0) + revenue);
+          }
+        }
+      }
+
+      const creditDailyMap = new Map();
+      const creditNotesTotalPaise = (creditRows.data || [])
+        .reduce((sum, row) => {
+          const creditAmount = toSafeInt(row.credit_amount_paise, 0);
+          const creditDate = toIsoStringSafe(row.created_at)?.slice(0, 10) || null;
+          if (creditDate) {
+            creditDailyMap.set(creditDate, (creditDailyMap.get(creditDate) || 0) + creditAmount);
+          }
+          return sum + creditAmount;
+        }, 0);
+
+      const recognizedRevenuePaise = Math.max(0, finalizedRevenuePaise - creditNotesTotalPaise);
+
+      const expenseDailyMap = new Map();
+      for (const row of (expenseRows.data || [])) {
+        const expenseDate = ensureNonEmptyString(row.expense_date_local) ? row.expense_date_local : null;
+        if (!expenseDate) continue;
+        const amount = toSafeInt(row.amount_paise, 0);
+        expenseDailyMap.set(expenseDate, (expenseDailyMap.get(expenseDate) || 0) + amount);
+      }
+
+      const expenseByCategoryTop = Object.entries(expenseByCategory)
+        .map(([category, total_paise]) => ({ category, total_paise }))
+        .sort((a, b) => b.total_paise - a.total_paise)
+        .slice(0, 5);
+
+      const expenseDailyTrend = Array.from(expenseDailyMap.entries())
+        .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+        .map(([business_date_local, amount_paise]) => ({ business_date_local, amount_paise }));
+
+      const revenueDailyTrend = Array.from(revenueDailyMap.entries())
+        .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+        .map(([business_date_local, recognized_revenue_paise]) => ({ business_date_local, recognized_revenue_paise }));
+
+      const creditDailyTrend = Array.from(creditDailyMap.entries())
+        .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+        .map(([business_date_local, credit_notes_paise]) => ({ business_date_local, credit_notes_paise }));
+
+      const netDailyAfterExpenses = expenseDailyTrend.map((row) => {
+        const revenueByDay = revenueDailyMap.get(row.business_date_local) || 0;
+        const creditByDay = creditDailyMap.get(row.business_date_local) || 0;
+        return {
+          business_date_local: row.business_date_local,
+          net_after_expenses_paise: Math.max(0, revenueByDay - creditByDay) - row.amount_paise
+        };
+      });
+
+      const role = auth.user.role;
+      let finance;
+      if (role === "Admin") {
+        finance = {
+          visibility: "full",
+          recognized_revenue_paise: recognizedRevenuePaise,
+          credit_notes_paise: creditNotesTotalPaise,
+          expenses_paise: expensesTotalPaise,
+          net_after_expenses_paise: recognizedRevenuePaise - expensesTotalPaise,
+          revenue_daily_paise: revenueDailyTrend,
+          credit_notes_daily_paise: creditDailyTrend,
+          net_daily_after_expenses_paise: netDailyAfterExpenses,
+          expense_categories_top: expenseByCategoryTop,
+          notes: "Profit/margin dashboards remain Admin-only"
+        };
+      } else if (role === "IT") {
+        finance = {
+          visibility: "restricted",
+          expenses_paise: expensesTotalPaise,
+          daily_expense_paise: expenseDailyTrend,
+          expense_categories_top: expenseByCategoryTop,
+          notes: "Profit and margin fields are intentionally hidden for IT"
+        };
+      } else {
+        finance = {
+          visibility: "restricted",
+          notes: "Finance analytics are intentionally hidden for Staff"
+        };
+      }
+
+      return json(200, {
+        code: "OK",
+        data: {
+          window_days: days,
+          role,
+          business_date_local: getBusinessDateInTimezone(env.DEFAULT_TIMEZONE || "Asia/Kolkata"),
+          query_guardrails: {
+            row_limit_requested: rowLimitRequested,
+            row_limit_effective: rowLimit,
+            timeouts_ms: {
+              base_query_timeout_ms: analyticsBaseQueryTimeoutMs,
+              case_slice_timeout_ms: caseSliceTimeoutMs,
+              inventory_slice_timeout_ms: inventorySliceTimeoutMs,
+              expense_slice_timeout_ms: expenseSliceTimeoutMs,
+              finance_slice_timeout_ms: financeSliceTimeoutMs
+            }
+          },
+          case_followup_kpis: {
+            received_cases: receivedCount,
+            delivered_items: deliveredCount,
+            pending_approvals: pendingApprovalCount,
+            pending_pickups: pendingPickupCount,
+            overdue_followups: overdueFollowupCount
+          },
+          inventory_trend: {
+            consumption_events: (consumptionRows.data || []).length,
+            consumed_qty_total: Number(totalConsumptionQty.toFixed(2)),
+            consumed_cost_total_paise: totalConsumptionCostPaise,
+            top_consumed_items: topConsumedItems,
+            daily_consumption: inventoryDailyConsumption
+          },
+          finance,
+          expense_trend: {
+            expenses_total_paise: expensesTotalPaise,
+            by_category_paise: expenseByCategory,
+            by_category_top: expenseByCategoryTop,
+            daily_expense_paise: expenseDailyTrend
+          }
+        }
+      });
     }
 
     if (request.method === "GET" && url.pathname === "/v1/admin/db-usage") {
@@ -2657,15 +3298,25 @@ export default {
       const thresholdPct = parseSettingNumber(thresholdSetting, 90);
       const hotRetentionDays = Math.max(1, Math.floor(parseSettingNumber(hotRetentionSetting, 60)));
 
-      const { data: latestUsage, error: usageErr } = await auth.serviceClient
-        .from("db_usage_snapshots")
-        .select("id, observed_at_utc, usage_mb, quota_mb, utilization_pct, threshold_pct, is_triggered")
-        .eq("tenant_id", auth.user.tenantId)
-        .order("observed_at_utc", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      let latestUsage;
+      try {
+        const usageResult = await withTimeout(
+          auth.serviceClient
+            .from("db_usage_snapshots")
+            .select("id, observed_at_utc, usage_mb, quota_mb, utilization_pct, threshold_pct, is_triggered")
+            .eq("tenant_id", auth.user.tenantId)
+            .order("observed_at_utc", { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+          LIST_QUERY_TIMEOUT_MS,
+          "ARCHIVE_TRIGGER_QUERY_TIMEOUT"
+        );
+        if (usageResult.error) return json(500, { code: "ARCHIVE_TRIGGER_CHECK_FAILED", message: "Unable to load DB usage snapshot" });
+        latestUsage = usageResult.data;
+      } catch {
+        return json(504, { code: "ARCHIVE_TRIGGER_QUERY_TIMEOUT", message: "Archive trigger validation query timed out" });
+      }
 
-      if (usageErr) return json(500, { code: "ARCHIVE_TRIGGER_CHECK_FAILED", message: "Unable to load DB usage snapshot" });
       if (!latestUsage) return json(400, { code: "DB_USAGE_REQUIRED", message: "Create a DB usage snapshot before trigger-check" });
 
       const effectiveThreshold = Number(latestUsage.threshold_pct || thresholdPct);
@@ -2685,17 +3336,26 @@ export default {
       }
 
       const cutoffIso = new Date(Date.now() - (hotRetentionDays * 24 * 60 * 60 * 1000)).toISOString();
-      const { data: candidates, error: candidateErr } = await auth.serviceClient
-        .from("cases")
-        .select("id, case_no, header_status, created_at, customers(name, phone)")
-        .eq("tenant_id", auth.user.tenantId)
-        .eq("is_active", true)
-        .in("header_status", ["DeliveredAll", "Closed"])
-        .lte("created_at", cutoffIso)
-        .order("created_at", { ascending: true })
-        .limit(limit);
-
-      if (candidateErr) return json(500, { code: "ARCHIVE_TRIGGER_CHECK_FAILED", message: "Unable to fetch archive candidates" });
+      let candidates = [];
+      try {
+        const candidateResult = await withTimeout(
+          auth.serviceClient
+            .from("cases")
+            .select("id, case_no, header_status, created_at, customers(name, phone)")
+            .eq("tenant_id", auth.user.tenantId)
+            .eq("is_active", true)
+            .in("header_status", ["DeliveredAll", "Closed"])
+            .lte("created_at", cutoffIso)
+            .order("created_at", { ascending: true })
+            .limit(limit),
+          LIST_QUERY_TIMEOUT_MS,
+          "ARCHIVE_TRIGGER_QUERY_TIMEOUT"
+        );
+        if (candidateResult.error) return json(500, { code: "ARCHIVE_TRIGGER_CHECK_FAILED", message: "Unable to fetch archive candidates" });
+        candidates = candidateResult.data || [];
+      } catch {
+        return json(504, { code: "ARCHIVE_TRIGGER_QUERY_TIMEOUT", message: "Archive trigger candidate query timed out" });
+      }
 
       return json(200, {
         code: "OK",
@@ -2707,8 +3367,8 @@ export default {
           forced: force,
           hot_retention_days: hotRetentionDays,
           cutoff_created_at_utc: cutoffIso,
-          candidate_count: (candidates || []).length,
-          candidates: candidates || [],
+          candidate_count: candidates.length,
+          candidates,
           note: "Run /v1/admin/archive/cases/{case_id} with verified backup bundle + checksum to archive each case"
         }
       });
@@ -2740,7 +3400,15 @@ export default {
       if (customerName) query = query.ilike("customer_name", `%${customerName}%`);
       if (restoreStatus) query = query.eq("restore_status", restoreStatus);
 
-      const { data, error } = await query;
+      let data;
+      let error;
+      try {
+        const result = await withTimeout(query, 7000, "ARCHIVE_INDEX_QUERY_TIMEOUT");
+        data = result.data;
+        error = result.error;
+      } catch {
+        return json(504, { code: "ARCHIVE_INDEX_QUERY_TIMEOUT", message: "Archive index query timed out" });
+      }
       if (error) return json(500, { code: "ARCHIVE_INDEX_FETCH_FAILED", message: "Unable to fetch archive index" });
 
       return json(200, { code: "OK", data: data || [], pagination: { limit, offset } });
@@ -2984,16 +3652,24 @@ export default {
 
       const caseId = url.pathname.split("/")[3];
       const { limit, offset } = getPagination(url);
-      const { data, error } = await auth.serviceClient
-        .from("case_status_history")
-        .select("id, case_id, case_item_id, from_status, to_status, changed_at_utc, changed_by, note")
-        .eq("tenant_id", auth.user.tenantId)
-        .eq("case_id", caseId)
-        .order("changed_at_utc", { ascending: false })
-        .range(offset, offset + limit - 1);
+      try {
+        const result = await withTimeout(
+          auth.serviceClient
+            .from("case_status_history")
+            .select("id, case_id, case_item_id, from_status, to_status, changed_at_utc, changed_by, note")
+            .eq("tenant_id", auth.user.tenantId)
+            .eq("case_id", caseId)
+            .order("changed_at_utc", { ascending: false })
+            .range(offset, offset + limit - 1),
+          LIST_QUERY_TIMEOUT_MS,
+          "CASE_STATUS_HISTORY_QUERY_TIMEOUT"
+        );
 
-      if (error) return json(500, { code: "CASE_STATUS_HISTORY_FETCH_FAILED", message: "Unable to fetch status history" });
-      return json(200, { code: "OK", data: data || [], pagination: { limit, offset } });
+        if (result.error) return json(500, { code: "CASE_STATUS_HISTORY_FETCH_FAILED", message: "Unable to fetch status history" });
+        return json(200, { code: "OK", data: result.data || [], pagination: { limit, offset } });
+      } catch {
+        return json(504, { code: "CASE_STATUS_HISTORY_QUERY_TIMEOUT", message: "Case status history query timed out" });
+      }
     }
 
     if (request.method === "POST" && /^\/v1\/admin\/users\/[^/]+\/deactivate$/.test(url.pathname)) {

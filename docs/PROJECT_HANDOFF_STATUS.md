@@ -1,7 +1,7 @@
 # Workshop Project Handoff Status (for Private-System Continuation)
 
 ## 1) Current Snapshot
-- Date: 2026-03-08
+- Date: 2026-03-09
 - Workspace root: `c:\Users\utkjaiswal\Desktop\Workshop\Workshop`
 - GitHub repo: `https://github.com/CoreThread/Workshop`
 - Cloudflare Worker deployed and live: `https://workshop-api.jaiswal-utkarshuj.workers.dev`
@@ -47,6 +47,41 @@
 - New Version ID:
   - `be1d0e59-8045-40b2-823b-6c3f55d7e66d`
 
+### Cloudflare Deployment (Phase 6 Archive Deploy) — Completed (2026-03-09)
+- Re-deployed backend after archive lifecycle vertical-slice validation.
+- Deployed Worker URL unchanged:
+  - `https://workshop-api.jaiswal-utkarshuj.workers.dev`
+- New Version ID:
+  - `d794340d-03dc-4810-9872-3bf911467400`
+
+### Cloudflare Deployment (Phase 7 Hardening) — Completed (2026-03-09)
+- Deployed Phase 7 hardening updates (broader timeout guardrails + smoke/index tooling support).
+- Deployed Worker URL unchanged:
+  - `https://workshop-api.jaiswal-utkarshuj.workers.dev`
+- New Version ID:
+  - `4a91b8cb-f867-4c49-81d7-a8786a59bb15`
+
+### Cloudflare Deployment (Phase 8 Analytics Start) — Completed (2026-03-09)
+- Deployed Phase 8 analytics baseline start endpoint and smoke tooling.
+- Deployed Worker URL unchanged:
+  - `https://workshop-api.jaiswal-utkarshuj.workers.dev`
+- New Version ID:
+  - `8829c251-61f2-4f1d-b2ee-e179f94df582`
+
+### Cloudflare Deployment (Phase 8 Analytics Breakdown Expansion) — Completed (2026-03-09)
+- Deployed additive Phase 8 analytics breakdown expansion (`/v1/analytics/overview` extended payload fields only; no breaking shape changes).
+- Deployed Worker URL unchanged:
+  - `https://workshop-api.jaiswal-utkarshuj.workers.dev`
+- New Version ID:
+  - `0c059569-71ef-4191-8236-f9a87da2ec4f`
+
+### Cloudflare Deployment (Phase 8 Hardening Pass) — Completed (2026-03-09)
+- Deployed Phase 8 hardening pass for analytics guardrails and per-slice timeout tuning.
+- Deployed Worker URL unchanged:
+  - `https://workshop-api.jaiswal-utkarshuj.workers.dev`
+- New Version ID:
+  - `0f75dd6b-9c30-497f-a903-d2a2023d5184`
+
 ### Cloudflare Pages Frontend Deployment — Completed (2026-03-08)
 - Created Pages project:
   - `workshop-frontend`
@@ -58,6 +93,27 @@
 - Note: if deploy appears stuck in terminal, run non-interactive command with CI mode:
   - `cd <workspace-root>`
   - `$env:CI="1"; npx --prefix backend wrangler pages deploy frontend --project-name workshop-frontend --branch main --commit-dirty=true`
+
+### Cloudflare Pages Frontend Deployment (Archive Admin UI Refresh) — Completed (2026-03-09)
+- Re-deployed frontend after adding Phase 6 Archive Admin operations card.
+- Stable website URL unchanged:
+  - `https://workshop-frontend.pages.dev`
+- New preview deployment URL:
+  - `https://d1382b58.workshop-frontend.pages.dev`
+
+### Cloudflare Pages Frontend Deployment (Phase 8 Analytics UI) — Completed (2026-03-09)
+- Re-deployed frontend after adding Phase 8 role-aware analytics card.
+- Stable website URL unchanged:
+  - `https://workshop-frontend.pages.dev`
+- New preview deployment URL:
+  - `https://57c25f38.workshop-frontend.pages.dev`
+
+### Cloudflare Pages Frontend Deployment (Phase 8 Breakdown Cards) — Completed (2026-03-09)
+- Re-deployed frontend after adding deeper Phase 8 trend cards (`Inventory Daily Slices`, `Finance + Category Trends`).
+- Stable website URL unchanged:
+  - `https://workshop-frontend.pages.dev`
+- New preview deployment URL:
+  - `https://4c352b7d.workshop-frontend.pages.dev`
 
 ### Phase 0 (Foundation & Contracts) — Completed
 - Backend scaffold created using Cloudflare Worker runtime.
@@ -464,6 +520,196 @@
 - Restore status after flow: `RESTORED`
 - Archive index rows: `1`, restored rows: `1`
 
+### Phase 6 Archive Admin UI (Minimal Operator Card) — Implemented + Deployed (2026-03-09)
+- Extended frontend in:
+  - `frontend/index.html`
+  - `frontend/app.js`
+- Added minimal Phase 6 Archive Admin UI controls:
+  - `POST /v1/admin/db-usage`
+  - `GET /v1/admin/db-usage`
+  - `POST /v1/admin/archive/trigger-check`
+  - `GET /v1/admin/archive-index`
+  - `POST /v1/admin/archive/restore/{archive_id}`
+- Explicitly deferred from UI for now (intentional):
+  - `POST /v1/admin/archive/cases/{case_id}`
+  - reason: avoid risky manual `backup_bundle_json` and checksum entry UX in minimal ops card
+
+### Phase 6 Archive Smoke Wrapper + Re-validation — Completed (2026-03-09)
+- Added wrapper helper and quick runbook:
+  - `backend/scripts/smoke_phase6_archive_all.ps1`
+  - `backend/scripts/README.md`
+- Wrapper run executes local then prod archive smoke scripts and verifies output markers.
+- Re-validation run summary:
+  - `PHASE6_ARCHIVE_LOCAL_OK`
+  - `PHASE6_ARCHIVE_PROD_OK`
+  - wrapper aggregate marker: `PHASE6_ARCHIVE_ALL_OK`
+- Local run artifacts (2026-03-09):
+  - `db_usage_snapshot_id`: `0fb546bc-1bae-4e2c-b4d8-1d767e75bdf9`
+  - `case_no`: `P6A-LOCAL-20260309130950`
+  - `case_id`: `92207bbd-16d6-4674-9ec2-528a3dc34448`
+  - `archive_id`: `cf9886b1-daf5-4922-84aa-44bbd65f3b53`
+- Prod run artifacts (2026-03-09):
+  - `db_usage_snapshot_id`: `a44b63c8-ec4e-4371-90a5-dd5eb89de303`
+  - `case_no`: `P6A-PROD-20260309130958`
+  - `case_id`: `7544c19d-4d81-4cc0-bb1e-436447030f8e`
+  - `archive_id`: `86233f04-92a5-400e-b952-473fc238b8f4`
+
+### Documentation Consistency Refresh — Completed (2026-03-09)
+- Updated baseline backend deployed version in:
+  - `docs/BASELINE_SNAPSHOT_2026-03-08.md`
+- Value set to latest known deploy from Wrangler list:
+  - `d794340d-03dc-4810-9872-3bf911467400`
+
+### Phase 7 Hardening — Completed (2026-03-09)
+- Added Phase 7 observability migration:
+  - `backend/migrations/0009_phase7_observability_perf_baseline.sql`
+- Added backend request telemetry logging for `/v1` routes:
+  - per-request method/path/status/error/latency capture into `api_request_logs`
+- Added Phase 7 admin metrics endpoint in `backend/src/index.js`:
+  - `GET /v1/admin/metrics/summary`
+  - includes request volume/error rate, latency `p50/p95`, failed backup/archive jobs, DB usage trend
+- Added API-side query timeout guardrails in critical list/ops paths:
+  - follow-up queue query timeout (`FOLLOWUP_QUERY_TIMEOUT`)
+  - archive index query timeout (`ARCHIVE_INDEX_QUERY_TIMEOUT`)
+  - metrics summary fetch timeout (`METRICS_QUERY_TIMEOUT`)
+- Added broader timeout guardrails on heavy list/search paths:
+  - `GET /v1/cases` (`CASE_SEARCH_TIMEOUT`)
+  - `GET /v1/cases/{case_id}/items` (`CASE_ITEMS_QUERY_TIMEOUT`)
+  - `GET /v1/cases/{case_id}/consumption` (`CASE_CONSUMPTION_QUERY_TIMEOUT`)
+  - `GET /v1/cases/{case_id}/status-history` (`CASE_STATUS_HISTORY_QUERY_TIMEOUT`)
+  - `GET /v1/cases/{case_id}/estimates` (`ESTIMATE_LIST_QUERY_TIMEOUT`)
+  - `GET /v1/inventory/items` (`INVENTORY_ITEMS_QUERY_TIMEOUT`)
+  - `GET /v1/inventory/ledger` (`INVENTORY_LEDGER_QUERY_TIMEOUT`)
+  - `GET /v1/expenses` (`EXPENSES_QUERY_TIMEOUT`)
+  - `GET /v1/recurring-bills` (`RECURRING_BILLS_QUERY_TIMEOUT`)
+  - `GET /v1/admin/ops-status` (`OPS_STATUS_QUERY_TIMEOUT`)
+  - `POST /v1/admin/archive/trigger-check` read phases (`ARCHIVE_TRIGGER_QUERY_TIMEOUT`)
+- Added Phase 7 operational scripts:
+  - `backend/scripts/verify_phase7_indexes.mjs`
+  - `backend/scripts/smoke_phase7_local.ps1`
+  - `backend/scripts/smoke_phase7_prod.ps1`
+  - `backend/scripts/smoke_phase7_all.ps1`
+- Migration application status:
+  - `0009_phase7_observability_perf_baseline.sql` applied on Supabase (confirmed)
+- Metrics endpoint verification status:
+  - Local `GET /v1/admin/metrics/summary?hours=24` validated as Admin (`code: OK`)
+  - Verified payload fields present: `error_rate_pct`, `latency_ms.p50`, `latency_ms.p95`, `failed_jobs`, `db_usage_trend`
+- Code-level validation after changes:
+  - `cd backend && npm run check` -> `OK`
+- Phase 6 regression re-check status after Phase 7 edits:
+  - `cd backend/scripts && ./smoke_phase6_archive_all.ps1` -> `PHASE6_ARCHIVE_ALL_OK`
+- Index verification status:
+  - `cd backend && node ./scripts/verify_phase7_indexes.mjs` -> `PHASE7_INDEXES_OK`
+- Phase 7 smoke status:
+  - local: `PHASE7_LOCAL_OK`
+  - prod: `PHASE7_PROD_OK`
+  - wrapper: `PHASE7_ALL_OK`
+- Production metrics verification status:
+  - `GET /v1/admin/metrics/summary?hours=24` verified on deployed Worker after deploy (`code: OK`)
+
+### Phase 8 Analytics Baseline — Started (2026-03-09)
+- Added Phase 8 role-aware analytics endpoint in `backend/src/index.js`:
+  - `GET /v1/analytics/overview`
+- Endpoint baseline behavior:
+  - `Admin`: full analytics payload including finance rollup fields
+  - `IT`: finance view restricted (no profit/margin style fields)
+  - `Staff`: finance analytics hidden/restricted
+- KPI priority in payload (as per UX/phase order):
+  - `case_followup_kpis`
+  - `inventory_trend`
+  - `expense_trend`
+  - role-filtered `finance`
+- Query resilience:
+  - analytics endpoint uses timeout-guarded query fanout with `ANALYTICS_QUERY_TIMEOUT`
+- Added Phase 8 smoke scripts:
+  - `backend/scripts/smoke_phase8_local.ps1`
+  - `backend/scripts/smoke_phase8_prod.ps1`
+  - `backend/scripts/smoke_phase8_all.ps1`
+- Validation status:
+  - local smoke: `PHASE8_LOCAL_OK`
+  - prod smoke: `PHASE8_PROD_OK`
+  - wrapper smoke: `PHASE8_ALL_OK`
+- Regression status after Phase 8 start:
+  - Phase 7 wrapper smoke still green: `PHASE7_ALL_OK`
+
+### Phase 8 Frontend Analytics Card — Implemented + Deployed (2026-03-09)
+- Extended frontend in:
+  - `frontend/index.html`
+  - `frontend/app.js`
+  - `frontend/styles.css`
+- Added minimal Phase 8 analytics operations card:
+  - load role-aware `GET /v1/analytics/overview`
+  - KPI blocks for case/follow-up, inventory trend, expense trend, finance (role filtered)
+  - role chips for `User Role` + `Finance Visibility`
+  - clear/reset analytics view action
+- Rendering behavior:
+  - Admin: full finance metrics shown
+  - IT: restricted finance card (no profit/margin style fields)
+  - Staff: ops-only finance-hidden presentation
+
+### Phase 8 Analytics Breakdown Expansion + Role Validation — Completed (2026-03-09)
+- Extended backend analytics payload (additive-only) in:
+  - `backend/src/index.js`
+- Additive fields added under existing endpoint `GET /v1/analytics/overview`:
+  - `inventory_trend.daily_consumption`
+  - `expense_trend.by_category_top`
+  - `expense_trend.daily_expense_paise`
+  - Admin-only finance additions: `revenue_daily_paise`, `credit_notes_daily_paise`, `net_daily_after_expenses_paise`, `expense_categories_top`
+  - IT restricted finance additions: `daily_expense_paise`, `expense_categories_top` (no revenue/profit fields)
+- Frontend analytics cards extended in:
+  - `frontend/index.html`
+  - `frontend/app.js`
+- New UI blocks:
+  - `Inventory Daily Slices`
+  - `Finance + Category Trends (Role-filtered)`
+- Smoke scripts expanded/added:
+  - updated: `backend/scripts/smoke_phase8_local.ps1`
+  - updated: `backend/scripts/smoke_phase8_prod.ps1`
+  - new: `backend/scripts/smoke_phase8_roles_local.ps1`
+  - new: `backend/scripts/smoke_phase8_roles_prod.ps1`
+  - new: `backend/scripts/smoke_phase8_roles_all.ps1`
+  - new helper: `backend/scripts/ensure_phase8_role_test_users.mjs`
+- Explicit IT/Staff validation evidence (local + prod):
+  - local marker: `PHASE8_ROLE_LOCAL_OK`
+  - prod marker: `PHASE8_ROLE_PROD_OK`
+  - wrapper marker: `PHASE8_ROLE_ALL_OK`
+  - IT finance visibility: `restricted`, expense fields present, revenue fields hidden
+  - Staff finance visibility: `restricted`, expense/revenue fields hidden
+- Additional regression check confirmed unchanged archive safety path:
+  - `cd backend/scripts && ./smoke_phase6_archive_all.ps1` -> `PHASE6_ARCHIVE_ALL_OK`
+
+### Phase 8 Hardening Pass (Guardrails + Timeout Tuning) — Completed (2026-03-09)
+- Hardened `GET /v1/analytics/overview` in `backend/src/index.js` with tighter guardrails:
+  - `row_limit` tightened to `min=50`, `max=1500`
+  - default `row_limit` tuned to `800`
+- Added per-slice timeout controls (additive query params):
+  - `case_slice_timeout_ms`
+  - `inventory_slice_timeout_ms`
+  - `expense_slice_timeout_ms`
+  - `finance_slice_timeout_ms`
+  - all timeout params are clamped and protected (`base min=1200`, slice min=800, max=12000)
+- Added additive response metadata for operational visibility:
+  - `data.query_guardrails.row_limit_requested`
+  - `data.query_guardrails.row_limit_effective`
+  - `data.query_guardrails.timeouts_ms.*`
+- Timeout behavior now returns slice-specific timeout error codes where applicable:
+  - `ANALYTICS_CASE_SLICE_TIMEOUT`
+  - `ANALYTICS_INVENTORY_SLICE_TIMEOUT`
+  - `ANALYTICS_EXPENSE_SLICE_TIMEOUT`
+  - `ANALYTICS_FINANCE_SLICE_TIMEOUT`
+- Added dedicated hardening smoke scripts:
+  - `backend/scripts/smoke_phase8_hardening_local.ps1`
+  - `backend/scripts/smoke_phase8_hardening_prod.ps1`
+  - `backend/scripts/smoke_phase8_hardening_all.ps1`
+- Hardening validation evidence:
+  - local marker: `PHASE8_HARDENING_LOCAL_OK`
+  - prod marker: `PHASE8_HARDENING_PROD_OK`
+  - wrapper marker: `PHASE8_HARDENING_ALL_OK`
+  - verified clamps: `row_limit=999999 -> 1500`, `row_limit=1 -> 50`
+  - verified timeout tuning values reflected in payload (`case=4100`, `inventory=4200`, `expense=4300`, `finance=4400`)
+- Regression status after hardening:
+  - Phase 8 wrapper smoke remains green: `PHASE8_ALL_OK`
+
 ---
 
 ## 3) Files That Matter Now
@@ -480,7 +726,22 @@
 - `backend/scripts/smoke_phase6_prod.ps1`
 - `backend/scripts/smoke_phase6_archive_local.ps1`
 - `backend/scripts/smoke_phase6_archive_prod.ps1`
+- `backend/scripts/smoke_phase6_archive_all.ps1`
+- `backend/scripts/verify_phase7_indexes.mjs`
+- `backend/scripts/smoke_phase7_local.ps1`
+- `backend/scripts/smoke_phase7_prod.ps1`
+- `backend/scripts/smoke_phase7_all.ps1`
+- `backend/scripts/smoke_phase8_local.ps1`
+- `backend/scripts/smoke_phase8_prod.ps1`
+- `backend/scripts/smoke_phase8_all.ps1`
+- `backend/scripts/smoke_phase8_hardening_local.ps1`
+- `backend/scripts/smoke_phase8_hardening_prod.ps1`
+- `backend/scripts/smoke_phase8_hardening_all.ps1`
+- `backend/scripts/README.md`
 - `docs/BASELINE_SNAPSHOT_2026-03-08.md`
+- `frontend/index.html`
+- `frontend/app.js`
+- `frontend/styles.css`
 
 ### Migrations
 - `backend/migrations/0001_phase0_v1_lean.sql`
@@ -491,6 +752,7 @@
 - `backend/migrations/0006_phase5_inventory_consumption_guards.sql`
 - `backend/migrations/0007_phase6_expenses_recurring_bills.sql`
 - `backend/migrations/0008_phase6_archive_lifecycle_ops.sql`
+- `backend/migrations/0009_phase7_observability_perf_baseline.sql`
 
 ### Env templates
 - `.env.example`
@@ -541,7 +803,13 @@
 - Phase 5 deployed smoke is now green on Worker (`PHASE5_UI_PROD_OK`).
 - Phase 6 minimal Expenses + Recurring Bills UI/API vertical slice is now implemented and smoke-validated locally (`PHASE6_UI_LIVE_OK`).
 - Phase 6 archive lifecycle backend vertical slice is now implemented (migration + APIs + checksum guard).
-- Next milestone: apply migration `0008`, validate archive APIs with smoke checks, then add minimal frontend admin archive card.
+- Phase 6 archive admin frontend card is now implemented and deployed.
+- Phase 6 archive smoke re-validation (local + prod) is now green via wrapper (`PHASE6_ARCHIVE_ALL_OK`).
+- Phase 7 hardening is now complete (telemetry + metrics + wider timeout guardrails + index verifier + smoke scripts + production deployment/validation).
+- Phase 8 analytics baseline has started with backend endpoint + smoke validations on local/prod.
+- Phase 8 frontend analytics card is now deployed with role-filtered rendering.
+- Next milestone: add deeper Phase 8 trend breakdown endpoints/cards (inventory consumption trend lines, category-wise finance trend slices) as additive APIs/UI.
+- Next milestone: begin Phase 9 HR module vertical slice (attendance + employee advances + role-safe visibility) with additive APIs/UI.
 
 ### C) Exact Runbook: Phase 4 live smoke (create -> approve -> finalize -> override -> credit-note)
 1. Start local backend API:
@@ -570,7 +838,7 @@
 ---
 
 ## 6) Known Operational Notes
-- Local Worker currently runs successfully (`npm run dev`) and typically binds to `http://127.0.0.1:8788`.
+- Local Worker currently runs successfully (`npm run dev`) and typically binds to `http://127.0.0.1:8788` (may auto-shift to `http://127.0.0.1:8787` if the port is occupied).
 - Root `/` route returns 404 by design; this is expected.
 - API routes are under `/v1`.
 - `POST /v1/cases` requires `customer.name`, `customer.phone`, `case_no`, and `item.item_category` + `item.reported_issue`.
@@ -618,4 +886,45 @@
   - `POST /v1/admin/archive/cases/{case_id}` (with verified backup checksum)
   - `GET /v1/admin/archive-index`
   - `POST /v1/admin/archive/restore/{archive_id}`
+16. Re-run archive smoke in one command (recommended):
+  - `cd backend/scripts && ./smoke_phase6_archive_all.ps1`
+  - confirm markers: `PHASE6_ARCHIVE_LOCAL_OK`, `PHASE6_ARCHIVE_PROD_OK`, `PHASE6_ARCHIVE_ALL_OK`
+17. Apply Phase 7 observability migration `0009`:
+  - status: already applied on Supabase
+18. Validate Phase 7 metrics endpoint (Admin/IT):
+  - `GET /v1/admin/metrics/summary?hours=24`
+  - confirm response includes `error_rate_pct`, `latency_ms.p50`, `latency_ms.p95`, `failed_jobs`, `db_usage_trend`
+19. Phase 7 deploy + production metrics verification status:
+  - completed on 2026-03-09
+  - Worker Version ID: `4a91b8cb-f867-4c49-81d7-a8786a59bb15`
+20. Re-run Phase 7 index verifier after any migration/index changes:
+  - `cd backend && node ./scripts/verify_phase7_indexes.mjs`
+  - confirm marker: `PHASE7_INDEXES_OK`
+21. Re-run Phase 7 smoke scripts after major backend updates:
+  - local: `cd backend && ./scripts/smoke_phase7_local.ps1`
+  - prod: `cd backend && ./scripts/smoke_phase7_prod.ps1`
+  - wrapper: `cd backend/scripts && ./smoke_phase7_all.ps1`
+  - confirm markers: `PHASE7_LOCAL_OK`, `PHASE7_PROD_OK`, `PHASE7_ALL_OK`
+22. Phase 8 baseline deployment + smoke status:
+  - completed on 2026-03-09
+  - Worker Version ID: `8829c251-61f2-4f1d-b2ee-e179f94df582`
+23. Re-run Phase 8 smoke scripts after analytics changes:
+  - local: `cd backend && ./scripts/smoke_phase8_local.ps1`
+  - prod: `cd backend && ./scripts/smoke_phase8_prod.ps1`
+  - wrapper: `cd backend/scripts && ./smoke_phase8_all.ps1`
+  - confirm markers: `PHASE8_LOCAL_OK`, `PHASE8_PROD_OK`, `PHASE8_ALL_OK`
+24. Run explicit Phase 8 role visibility checks (IT + Staff):
+  - local: `cd backend && ./scripts/smoke_phase8_roles_local.ps1`
+  - prod: `cd backend && ./scripts/smoke_phase8_roles_prod.ps1`
+  - wrapper: `cd backend/scripts && ./smoke_phase8_roles_all.ps1`
+  - confirm markers: `PHASE8_ROLE_LOCAL_OK`, `PHASE8_ROLE_PROD_OK`, `PHASE8_ROLE_ALL_OK`
+25. If IT/Staff test users are missing/inactive for role validation:
+  - `cd backend && node ./scripts/ensure_phase8_role_test_users.mjs`
+26. Phase 8 hardening validation runbook:
+  - local: `cd backend && ./scripts/smoke_phase8_hardening_local.ps1`
+  - prod: `cd backend && ./scripts/smoke_phase8_hardening_prod.ps1`
+  - wrapper: `cd backend/scripts && ./smoke_phase8_hardening_all.ps1`
+  - confirm markers: `PHASE8_HARDENING_LOCAL_OK`, `PHASE8_HARDENING_PROD_OK`, `PHASE8_HARDENING_ALL_OK`
+27. Latest deployed Worker after hardening:
+  - Version ID: `0f75dd6b-9c30-497f-a903-d2a2023d5184`
 

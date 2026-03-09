@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Workshop Phase 2-5 UI</title>
+  <title>Workshop Phase 2-8 UI</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
@@ -13,7 +13,7 @@
   <main class="container app-shell">
     <header class="hero card">
       <h1>Workshop Ops Console</h1>
-      <p class="subtitle">Phase 2-5 Controls with Priority Workflow for Case, Billing, and Inventory</p>
+      <p class="subtitle">Phase 2-8 Controls with Priority Workflow for Case, Follow-up, Inventory, Archive, and Analytics</p>
     </header>
 
     <section class="card">
@@ -420,6 +420,128 @@
       <button id="payBillBtn" class="warn">Log Bill Payment + Roll Due Date</button>
 
       <pre id="phase6Result"></pre>
+    </section>
+
+    <section class="card">
+      <h2>Phase 6 Archive Admin Operations</h2>
+      <p class="hint">Operator-first controls for DB usage monitor, trigger readiness, archive index lookup, and restore by archive ID.</p>
+
+      <h3>1) Save DB Usage Snapshot</h3>
+      <div class="workflow-grid">
+        <div>
+          <label>Usage MB</label>
+          <input id="archiveUsageMb" value="475" />
+        </div>
+        <div>
+          <label>Quota MB</label>
+          <input id="archiveQuotaMb" value="500" />
+        </div>
+        <div>
+          <label>Threshold %</label>
+          <input id="archiveThresholdPct" value="90" />
+        </div>
+        <div>
+          <label>Source</label>
+          <input id="archiveUsageSource" value="ui-manual" />
+        </div>
+      </div>
+      <button id="saveDbUsageBtn">Save DB Usage Snapshot</button>
+
+      <h3>2) Load Latest DB Usage</h3>
+      <button id="loadDbUsageBtn" class="ghost">Load DB Usage</button>
+
+      <h3>3) Archive Trigger Check</h3>
+      <div class="workflow-grid">
+        <div>
+          <label>Force Trigger Check</label>
+          <select id="archiveTriggerForce">
+            <option value="false" selected>false</option>
+            <option value="true">true</option>
+          </select>
+        </div>
+        <div>
+          <label>Candidate Limit</label>
+          <input id="archiveTriggerLimit" value="10" />
+        </div>
+      </div>
+      <button id="runArchiveTriggerCheckBtn" class="accent">Run Archive Trigger Check</button>
+
+      <h3>4) Archive Index Lookup</h3>
+      <div class="workflow-grid">
+        <div>
+          <label>Case No (optional)</label>
+          <input id="archiveIndexCaseNo" placeholder="P6A-PROD-..." />
+        </div>
+        <div>
+          <label>Phone (optional)</label>
+          <input id="archiveIndexPhone" placeholder="98..." />
+        </div>
+        <div>
+          <label>Customer Name (optional)</label>
+          <input id="archiveIndexCustomerName" placeholder="name" />
+        </div>
+        <div>
+          <label>Restore Status (optional)</label>
+          <select id="archiveIndexRestoreStatus">
+            <option value="" selected>all</option>
+            <option value="ARCHIVED">ARCHIVED</option>
+            <option value="RESTORED">RESTORED</option>
+          </select>
+        </div>
+      </div>
+      <button id="loadArchiveIndexBtn" class="ghost">Load Archive Index</button>
+
+      <h3>5) Restore Archived Case</h3>
+      <label>Archive ID</label>
+      <input id="archiveRestoreId" placeholder="archive_id" />
+      <button id="restoreArchiveBtn" class="warn">Restore Archived Case</button>
+
+      <pre id="archiveAdminResult"></pre>
+    </section>
+
+    <section class="card">
+      <h2>Phase 8 Analytics Overview</h2>
+      <p class="hint">Role-aware analytics: Admin gets full financial rollup, IT gets restricted finance visibility, Staff sees operations-only dashboard.</p>
+
+      <div class="workflow-grid">
+        <div>
+          <label>Window Days</label>
+          <input id="analyticsDays" value="30" />
+        </div>
+        <div>
+          <label>Query Timeout (ms)</label>
+          <input id="analyticsTimeoutMs" value="9000" />
+        </div>
+      </div>
+      <div class="row">
+        <button id="loadAnalyticsBtn" class="accent">Load Analytics Overview</button>
+        <button id="clearAnalyticsBtn" class="ghost">Clear Analytics View</button>
+      </div>
+
+      <div class="phase8-role-band">
+        <span class="chip"><strong>User Role</strong> <span id="analyticsRoleChip">NA</span></span>
+        <span class="chip"><strong>Finance Visibility</strong> <span id="analyticsFinanceChip">NA</span></span>
+      </div>
+
+      <h3>Case + Follow-up KPIs</h3>
+      <div id="analyticsCaseKpi" class="analytics-grid"></div>
+
+      <h3>Inventory Trend</h3>
+      <div id="analyticsInventoryKpi" class="analytics-grid"></div>
+
+      <h3>Inventory Daily Slices</h3>
+      <div id="analyticsInventorySlices" class="analytics-grid"></div>
+
+      <h3>Expense Trend</h3>
+      <div id="analyticsExpenseKpi" class="analytics-grid"></div>
+
+      <h3>Finance (Role-filtered)</h3>
+      <div id="analyticsFinanceKpi" class="analytics-grid"></div>
+
+      <h3>Finance + Category Trends (Role-filtered)</h3>
+      <div id="analyticsFinanceTrend" class="analytics-grid"></div>
+
+      <pre id="phase8Result"></pre>
     </section>
 
     <details class="card" open>
