@@ -1,9 +1,9 @@
-# Baseline Snapshot - 2026-03-08
+# Baseline Snapshot - 2026-03-10
 
 ## Deployment Baseline
 - Backend API: `https://workshop-api.jaiswal-utkarshuj.workers.dev`
 - Frontend Website: `https://workshop-frontend.pages.dev`
-- Backend deployed version: `0f75dd6b-9c30-497f-a903-d2a2023d5184`
+- Backend deployed version: `a20f56a6-2e40-44ef-a221-5b9064f457ae`
 
 ## Regression Baseline
 - Phase 5 prod smoke: `PHASE5_UI_PROD_OK`
@@ -22,9 +22,14 @@
 - Phase 8 hardening local smoke: `PHASE8_HARDENING_LOCAL_OK`
 - Phase 8 hardening prod smoke: `PHASE8_HARDENING_PROD_OK`
 - Phase 8 hardening wrapper smoke: `PHASE8_HARDENING_ALL_OK`
+- Phase 9 local smoke: `PHASE9_LOCAL_OK`
+- Phase 9 prod smoke: `PHASE9_PROD_OK`
+- Phase 9 wrapper smoke: `PHASE9_ALL_OK`
+- Prod-only release gate: `RELEASE_PROD_GATE_OK`
+- CI mandatory release job: `.github/workflows/release-prod-gate.yml`
 
 ## Scope Baseline
-- Phase 0 to Phase 6 expenses/recurring bill vertical slice completed.
+- Phase 0 to Phase 10 release engineering scope completed and validated.
 - Phase 6 archive lifecycle implementation started with:
   - migration `backend/migrations/0008_phase6_archive_lifecycle_ops.sql`
   - backend endpoints for DB usage monitor, archive trigger-check, archive index, archive case, and restore case.
@@ -58,7 +63,33 @@
     - `backend/scripts/smoke_phase8_hardening_local.ps1`
     - `backend/scripts/smoke_phase8_hardening_prod.ps1`
     - `backend/scripts/smoke_phase8_hardening_all.ps1`
+  - Phase 9 HR module vertical slice implemented additively:
+    - migration: `backend/migrations/0010_phase9_hr_attendance_advances.sql`
+    - backend routes: `/v1/hr/attendance`, `/v1/hr/advances`, `/v1/hr/summary`
+    - strict role-safety: Admin-only HR route access (IT/Staff blocked)
+    - frontend HR operations card added in `frontend/index.html` + `frontend/app.js`
+    - smoke scripts added:
+      - `backend/scripts/smoke_phase9_local.ps1`
+      - `backend/scripts/smoke_phase9_prod.ps1`
+      - `backend/scripts/smoke_phase9_all.ps1`
 
 ## Operator Note
-- Keep this file as release-level reference before proceeding to next hardening and archive smoke validation.
-- Next release action: start Phase 9 HR module vertical slice (attendance + advances + role-safe visibility), keeping Phase 8 hardening guardrails intact.
+- Keep this file as release-level reference for post-Phase 10 closure baseline.
+- Closure validation locked on 2026-03-10 with no `/v1` regression observed in Phase 8 and Phase 6 archive wrappers.
+- Script hardening locked on 2026-03-10:
+  - local wrappers now run `preflight_local_smoke.ps1` (health + auth ping) before local smoke execution
+  - local smoke scripts now auto-resolve local API base (`WORKSHOP_LOCAL_API_BASE` override, fallback probe `8788 -> 8787`)
+  - prod-only CI/release wrapper added: `backend/scripts/smoke_release_prod_gate.ps1`
+  - prod-only gate now supports structured JSON output via `-ResultPath` and CI artifact upload (`release_prod_gate_result.json`)
+- Phase 10 burn-in locked on 2026-03-10:
+  - 3 consecutive prod gate greens archived:
+    - `docs/evidence/phase10/burn-in/run_01.txt`
+    - `docs/evidence/phase10/burn-in/run_02.txt`
+    - `docs/evidence/phase10/burn-in/run_03.txt`
+  - summary report: `docs/evidence/phase10/PHASE10_BURNIN_REPORT_2026-03-10.md`
+- Final acceptance evidence pack archived:
+  - `docs/evidence/phase10/FINAL_ACCEPTANCE_EVIDENCE_PACK_2026-03-10.md`
+- v1.0 release sign-off frozen:
+  - `docs/V1_0_RELEASE_SIGNOFF_2026-03-10.md`
+- Phase 10 closure state:
+  - Phase 10 is closed with deterministic gate evidence and v1.0 sign-off on 2026-03-10.

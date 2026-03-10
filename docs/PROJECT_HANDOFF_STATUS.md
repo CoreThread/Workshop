@@ -1,7 +1,7 @@
 # Workshop Project Handoff Status (for Private-System Continuation)
 
 ## 1) Current Snapshot
-- Date: 2026-03-09
+- Date: 2026-03-10
 - Workspace root: `c:\Users\utkjaiswal\Desktop\Workshop\Workshop`
 - GitHub repo: `https://github.com/CoreThread/Workshop`
 - Cloudflare Worker deployed and live: `https://workshop-api.jaiswal-utkarshuj.workers.dev`
@@ -81,6 +81,16 @@
   - `https://workshop-api.jaiswal-utkarshuj.workers.dev`
 - New Version ID:
   - `0f75dd6b-9c30-497f-a903-d2a2023d5184`
+
+### Cloudflare Deployment (Phase 9 Verification) — Verified Live (2026-03-10)
+- Verified current Worker deployment on Cloudflare without additional redeploy.
+- Deployed Worker URL unchanged:
+  - `https://workshop-api.jaiswal-utkarshuj.workers.dev`
+- Latest Version ID observed from `wrangler deployments list`:
+  - `a20f56a6-2e40-44ef-a221-5b9064f457ae`
+- Production verification markers:
+  - `./scripts/smoke_phase9_prod.ps1` -> `PHASE9_PROD_OK`
+  - `./scripts/smoke_phase9_all.ps1` -> `PHASE9_ALL_OK`
 
 ### Cloudflare Pages Frontend Deployment — Completed (2026-03-08)
 - Created Pages project:
@@ -710,6 +720,54 @@
 - Regression status after hardening:
   - Phase 8 wrapper smoke remains green: `PHASE8_ALL_OK`
 
+### Phase 9 (HR Module: Attendance + Employee Advances, Role-safe) — Implemented (2026-03-10)
+- Added dedicated Phase 9 migration file:
+  - `backend/migrations/0010_phase9_hr_attendance_advances.sql`
+- Migration adds Phase 9 HR base entities:
+  - `employee_attendance`
+  - `employee_advances`
+- Implemented Phase 9 backend endpoints in `backend/src/index.js`:
+  - `GET /v1/hr/attendance`
+  - `POST /v1/hr/attendance`
+  - `GET /v1/hr/advances`
+  - `POST /v1/hr/advances`
+  - `GET /v1/hr/summary`
+- Role model applied for HR sensitivity:
+  - Admin-only access for all `/v1/hr/*` endpoints
+  - IT/Staff blocked (no HR-sensitive visibility leaks)
+- Added Phase 9 frontend HR operations card in:
+  - `frontend/index.html`
+  - `frontend/app.js`
+- Added Phase 9 smoke scripts:
+  - `backend/scripts/smoke_phase9_local.ps1`
+  - `backend/scripts/smoke_phase9_prod.ps1`
+  - `backend/scripts/smoke_phase9_all.ps1`
+- Runbook updated:
+  - `backend/scripts/README.md`
+- Validation/deploy status:
+  - migration apply script run: `node ./scripts/apply_migration_0010.mjs` -> `MIGRATION_0010_APPLIED_OK`
+  - local smoke: `./scripts/smoke_phase9_local.ps1` -> `PHASE9_LOCAL_OK`
+  - prod smoke: `./scripts/smoke_phase9_prod.ps1` -> `PHASE9_PROD_OK`
+  - wrapper smoke: `cd backend/scripts && ./smoke_phase9_all.ps1` -> `PHASE9_ALL_OK`
+  - minimal regression re-checks after Phase 9 closure:
+    - `./smoke_phase8_all.ps1` -> `PHASE8_ALL_OK`
+    - `./smoke_phase8_roles_all.ps1` -> `PHASE8_ROLE_ALL_OK`
+    - `./smoke_phase8_hardening_all.ps1` -> `PHASE8_HARDENING_ALL_OK`
+    - `./smoke_phase6_archive_all.ps1` -> `PHASE6_ARCHIVE_ALL_OK`
+  - prod-only release gate (CI-safe):
+    - `./smoke_release_prod_gate.ps1` -> `RELEASE_PROD_GATE_OK`
+    - CI workflow (mandatory release job): `.github/workflows/release-prod-gate.yml`
+  - script hardening applied:
+    - local wrappers now run `preflight_local_smoke.ps1` before local smoke execution
+    - preflight checks both local health and auth ping for fail-fast diagnostics
+    - local smoke scripts now auto-resolve local API base (`8788 -> 8787`, env override `WORKSHOP_LOCAL_API_BASE`)
+  - Phase 10 entry criterion:
+    - start only after prod-only gate stays green (`RELEASE_PROD_GATE_OK`) in release flow
+  - Phase 10 formal artifacts:
+    - burn-in report: `docs/evidence/phase10/PHASE10_BURNIN_REPORT_2026-03-10.md`
+    - acceptance evidence pack: `docs/evidence/phase10/FINAL_ACCEPTANCE_EVIDENCE_PACK_2026-03-10.md`
+    - v1.0 sign-off: `docs/V1_0_RELEASE_SIGNOFF_2026-03-10.md`
+
 ---
 
 ## 3) Files That Matter Now
@@ -737,8 +795,17 @@
 - `backend/scripts/smoke_phase8_hardening_local.ps1`
 - `backend/scripts/smoke_phase8_hardening_prod.ps1`
 - `backend/scripts/smoke_phase8_hardening_all.ps1`
+- `backend/scripts/smoke_phase9_local.ps1`
+- `backend/scripts/smoke_phase9_prod.ps1`
+- `backend/scripts/smoke_phase9_all.ps1`
+- `backend/scripts/preflight_local_smoke.ps1`
+- `backend/scripts/smoke_release_prod_gate.ps1`
+- `.github/workflows/release-prod-gate.yml`
 - `backend/scripts/README.md`
 - `docs/BASELINE_SNAPSHOT_2026-03-08.md`
+- `docs/evidence/phase10/PHASE10_BURNIN_REPORT_2026-03-10.md`
+- `docs/evidence/phase10/FINAL_ACCEPTANCE_EVIDENCE_PACK_2026-03-10.md`
+- `docs/V1_0_RELEASE_SIGNOFF_2026-03-10.md`
 - `frontend/index.html`
 - `frontend/app.js`
 - `frontend/styles.css`
@@ -753,6 +820,7 @@
 - `backend/migrations/0007_phase6_expenses_recurring_bills.sql`
 - `backend/migrations/0008_phase6_archive_lifecycle_ops.sql`
 - `backend/migrations/0009_phase7_observability_perf_baseline.sql`
+- `backend/migrations/0010_phase9_hr_attendance_advances.sql`
 
 ### Env templates
 - `.env.example`
@@ -782,34 +850,18 @@
 
 ## 5) What Is Left (Ordered)
 
-### A) Phase 4 verification (backend + minimal UI completed; rerun anytime)
-1. Ensure migration `0005` is present on DB (one-time):
-  - Option 1 (script): `cd backend && node scripts/apply_migration_0005.mjs`
-  - Option 2 (manual): run `backend/migrations/0005_phase4_estimate_billing_lock.sql` in Supabase SQL Editor
-2. Run smoke script against local API:
-  - `cd backend && ./scripts/smoke_phase4_live.ps1`
-3. Run equivalent smoke against deployed Worker URL (manual/invoke-rest method):
-  - `https://workshop-api.jaiswal-utkarshuj.workers.dev`
-4. Expected terminal summary:
-  - `smoke = PHASE4_OK`
-  - `finalize_state = FINALIZED`
-  - `lock_flag = true`
-  - `override_count >= 1`
-  - non-empty `credit_note_no`
+### A) Remaining feature phases
+- None. Phases 0 through 10 are implemented, validated, and documented.
 
-### B) Next build milestone after Phase 4 backend validation
-- Phase 5 backend + minimal UI are now complete and locally smoke-validated.
-- Phase 5 UX hardening is now complete on local UI.
-- Phase 5 deployed smoke is now green on Worker (`PHASE5_UI_PROD_OK`).
-- Phase 6 minimal Expenses + Recurring Bills UI/API vertical slice is now implemented and smoke-validated locally (`PHASE6_UI_LIVE_OK`).
-- Phase 6 archive lifecycle backend vertical slice is now implemented (migration + APIs + checksum guard).
-- Phase 6 archive admin frontend card is now implemented and deployed.
-- Phase 6 archive smoke re-validation (local + prod) is now green via wrapper (`PHASE6_ARCHIVE_ALL_OK`).
-- Phase 7 hardening is now complete (telemetry + metrics + wider timeout guardrails + index verifier + smoke scripts + production deployment/validation).
-- Phase 8 analytics baseline has started with backend endpoint + smoke validations on local/prod.
-- Phase 8 frontend analytics card is now deployed with role-filtered rendering.
-- Next milestone: add deeper Phase 8 trend breakdown endpoints/cards (inventory consumption trend lines, category-wise finance trend slices) as additive APIs/UI.
-- Next milestone: begin Phase 9 HR module vertical slice (attendance + employee advances + role-safe visibility) with additive APIs/UI.
+### B) Ongoing release-operation actions
+1. Keep prod gate green in CI and on-demand:
+  - `cd backend/scripts && ./smoke_release_prod_gate.ps1`
+2. Persist machine-readable gate results when required for audits:
+  - `cd backend/scripts && ./smoke_release_prod_gate.ps1 -ResultPath ../../artifacts/release_prod_gate_result.json`
+3. Retain and review gate artifacts from CI:
+  - `artifacts/release_prod_gate_output.txt`
+  - `artifacts/release_prod_gate_result.json`
+4. Continue baseline evidence maintenance for new production deployments or schema changes.
 
 ### C) Exact Runbook: Phase 4 live smoke (create -> approve -> finalize -> override -> credit-note)
 1. Start local backend API:

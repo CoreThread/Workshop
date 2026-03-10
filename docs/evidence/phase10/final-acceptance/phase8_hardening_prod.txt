@@ -1,0 +1,14 @@
+﻿{
+    "smoke":  "PHASE8_HARDENING_PROD_OK",
+    "base_url":  "https://workshop-api.jaiswal-utkarshuj.workers.dev",
+    "upper_row_limit_requested":  999999,
+    "upper_row_limit_effective":  1500,
+    "lower_row_limit_requested":  1,
+    "lower_row_limit_effective":  50,
+    "base_timeout_effective_ms":  1200,
+    "case_slice_timeout_effective_ms":  4100,
+    "inventory_slice_timeout_effective_ms":  4200,
+    "expense_slice_timeout_effective_ms":  4300,
+    "finance_slice_timeout_effective_ms":  4400
+}
+

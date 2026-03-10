@@ -1,0 +1,14 @@
+﻿{
+    "smoke":  "PHASE8_ROLE_PROD_OK",
+    "base_url":  "https://workshop-api.jaiswal-utkarshuj.workers.dev",
+    "it_role":  "IT",
+    "it_finance_visibility":  "restricted",
+    "it_expenses_paise":  64000,
+    "it_daily_expense_points":  1,
+    "it_has_recognized_revenue":  false,
+    "staff_role":  "Staff",
+    "staff_finance_visibility":  "restricted",
+    "staff_has_expenses_field":  false,
+    "staff_has_recognized_revenue":  false
+}
+

@@ -1,0 +1,321 @@
+﻿===== CASE_RUN_1 =====
+{
+    "smoke":  "PHASE4_OK",
+    "case_no":  "P4-20260310155849",
+    "case_id":  "eb692ea3-9f1a-4b26-864f-943864685521",
+    "case_item_id":  "655a8787-efaf-4f45-b31a-a13f942582ff",
+    "estimate_id":  "94a0d714-f208-4321-95d8-7b618256ed44",
+    "approve_decision":  "Approved",
+    "finalize_state":  "FINALIZED",
+    "lock_flag":  true,
+    "override_count":  1,
+    "overridden_invoice_total_paise":  25370,
+    "credit_note_no":  "CN-2026-0310102900",
+    "estimate_invoice_state_after_credit":  "FINALIZED",
+    "last_override_reason":  "Customer final labor adjustment after finalize"
+}
+===== CASE_RUN_2 =====
+{
+    "smoke":  "PHASE4_OK",
+    "case_no":  "P4-20260310155901",
+    "case_id":  "206e5822-ae7c-4cde-a1c9-5877698bcb8e",
+    "case_item_id":  "a443930e-e79d-4c2d-b1a6-33a6fbd50c9a",
+    "estimate_id":  "39588cca-c049-467b-942b-e12a6dfff004",
+    "approve_decision":  "Approved",
+    "finalize_state":  "FINALIZED",
+    "lock_flag":  true,
+    "override_count":  1,
+    "overridden_invoice_total_paise":  25370,
+    "credit_note_no":  "CN-2026-0310102909",
+    "estimate_invoice_state_after_credit":  "FINALIZED",
+    "last_override_reason":  "Customer final labor adjustment after finalize"
+}
+===== CASE_RUN_3 =====
+{
+    "smoke":  "PHASE4_OK",
+    "case_no":  "P4-20260310155910",
+    "case_id":  "75540515-b0a9-4a99-b84d-8d30061835ec",
+    "case_item_id":  "8091b073-587b-4341-be2c-64ae4b838adc",
+    "estimate_id":  "417ec1ec-9641-45e1-83b6-6f912c189eb7",
+    "approve_decision":  "Approved",
+    "finalize_state":  "FINALIZED",
+    "lock_flag":  true,
+    "override_count":  1,
+    "overridden_invoice_total_paise":  25370,
+    "credit_note_no":  "CN-2026-0310102918",
+    "estimate_invoice_state_after_credit":  "FINALIZED",
+    "last_override_reason":  "Customer final labor adjustment after finalize"
+}
+===== CASE_RUN_4 =====
+{
+    "smoke":  "PHASE4_OK",
+    "case_no":  "P4-20260310155919",
+    "case_id":  "8978641d-4e80-41ff-8477-01a22b409fc9",
+    "case_item_id":  "afb86fa7-32fb-4814-a0a3-48edb381bf96",
+    "estimate_id":  "296e85ec-157b-4dc0-9061-880c998bfae6",
+    "approve_decision":  "Approved",
+    "finalize_state":  "FINALIZED",
+    "lock_flag":  true,
+    "override_count":  1,
+    "overridden_invoice_total_paise":  25370,
+    "credit_note_no":  "CN-2026-0310102927",
+    "estimate_invoice_state_after_credit":  "FINALIZED",
+    "last_override_reason":  "Customer final labor adjustment after finalize"
+}
+===== CASE_RUN_5 =====
+{
+    "smoke":  "PHASE4_OK",
+    "case_no":  "P4-20260310155928",
+    "case_id":  "aceb2fed-89d3-47ba-aa13-6647607c5c35",
+    "case_item_id":  "5c977b18-5ce9-4ad0-9034-484c49300bee",
+    "estimate_id":  "5eaf1cac-abc0-4f54-92b1-a88f23fc49c8",
+    "approve_decision":  "Approved",
+    "finalize_state":  "FINALIZED",
+    "lock_flag":  true,
+    "override_count":  1,
+    "overridden_invoice_total_paise":  25370,
+    "credit_note_no":  "CN-2026-0310102936",
+    "estimate_invoice_state_after_credit":  "FINALIZED",
+    "last_override_reason":  "Customer final labor adjustment after finalize"
+}
+===== CASE_RUN_6 =====
+{
+    "smoke":  "PHASE4_OK",
+    "case_no":  "P4-20260310155936",
+    "case_id":  "aef5b181-e612-4779-bf0b-08ff1739e780",
+    "case_item_id":  "6152ddeb-6cdb-4e68-8085-741f33c6ae0a",
+    "estimate_id":  "06d6c38e-4906-4081-a44a-e943c20d878f",
+    "approve_decision":  "Approved",
+    "finalize_state":  "FINALIZED",
+    "lock_flag":  true,
+    "override_count":  1,
+    "overridden_invoice_total_paise":  25370,
+    "credit_note_no":  "CN-2026-0310102944",
+    "estimate_invoice_state_after_credit":  "FINALIZED",
+    "last_override_reason":  "Customer final labor adjustment after finalize"
+}
+===== CASE_RUN_7 =====
+{
+    "smoke":  "PHASE4_OK",
+    "case_no":  "P4-20260310155945",
+    "case_id":  "d110b87b-200b-4fb0-98bc-471beb24dcde",
+    "case_item_id":  "aeb96a41-78ae-4327-b46a-72bad4e8870c",
+    "estimate_id":  "db8ebbd5-5862-44bf-b96a-f844280044f3",
+    "approve_decision":  "Approved",
+    "finalize_state":  "FINALIZED",
+    "lock_flag":  true,
+    "override_count":  1,
+    "overridden_invoice_total_paise":  25370,
+    "credit_note_no":  "CN-2026-0310102953",
+    "estimate_invoice_state_after_credit":  "FINALIZED",
+    "last_override_reason":  "Customer final labor adjustment after finalize"
+}
+===== CASE_RUN_8 =====
+{
+    "smoke":  "PHASE4_OK",
+    "case_no":  "P4-20260310155954",
+    "case_id":  "ec743b25-5786-4f89-96d9-c1d5b3f27fcc",
+    "case_item_id":  "42dd41d3-b9ab-4db4-99b8-70d535b9c073",
+    "estimate_id":  "9033126d-b665-41ae-bb42-10cd73eec65b",
+    "approve_decision":  "Approved",
+    "finalize_state":  "FINALIZED",
+    "lock_flag":  true,
+    "override_count":  1,
+    "overridden_invoice_total_paise":  25370,
+    "credit_note_no":  "CN-2026-0310103002",
+    "estimate_invoice_state_after_credit":  "FINALIZED",
+    "last_override_reason":  "Customer final labor adjustment after finalize"
+}
+===== CASE_RUN_9 =====
+{
+    "smoke":  "PHASE4_OK",
+    "case_no":  "P4-20260310160003",
+    "case_id":  "0aaab8cd-2b8c-49ac-b209-47239eb2850a",
+    "case_item_id":  "b6fb371f-3167-46f4-b6db-abf26579246c",
+    "estimate_id":  "30f37ac2-2df0-416c-ab48-1c4a815ef786",
+    "approve_decision":  "Approved",
+    "finalize_state":  "FINALIZED",
+    "lock_flag":  true,
+    "override_count":  1,
+    "overridden_invoice_total_paise":  25370,
+    "credit_note_no":  "CN-2026-0310103011",
+    "estimate_invoice_state_after_credit":  "FINALIZED",
+    "last_override_reason":  "Customer final labor adjustment after finalize"
+}
+===== CASE_RUN_10 =====
+{
+    "smoke":  "PHASE4_OK",
+    "case_no":  "P4-20260310160012",
+    "case_id":  "2e4d59ce-3b44-417a-bf85-bb8c92f2fa26",
+    "case_item_id":  "da535b93-0761-4605-b906-5e619c58a0b2",
+    "estimate_id":  "9c2d11ad-7afc-4a11-ae25-57672f4e05a1",
+    "approve_decision":  "Approved",
+    "finalize_state":  "FINALIZED",
+    "lock_flag":  true,
+    "override_count":  1,
+    "overridden_invoice_total_paise":  25370,
+    "credit_note_no":  "CN-2026-0310103021",
+    "estimate_invoice_state_after_credit":  "FINALIZED",
+    "last_override_reason":  "Customer final labor adjustment after finalize"
+}
+===== CASE_RUN_11 =====
+{
+    "smoke":  "PHASE4_OK",
+    "case_no":  "P4-20260310160022",
+    "case_id":  "aa5d0b3f-1b10-4701-96a4-4e727caf3e31",
+    "case_item_id":  "46996cb3-df57-41cd-8880-2c37260e64e2",
+    "estimate_id":  "106f414c-2541-45dc-87fa-72fc175bf99c",
+    "approve_decision":  "Approved",
+    "finalize_state":  "FINALIZED",
+    "lock_flag":  true,
+    "override_count":  1,
+    "overridden_invoice_total_paise":  25370,
+    "credit_note_no":  "CN-2026-0310103030",
+    "estimate_invoice_state_after_credit":  "FINALIZED",
+    "last_override_reason":  "Customer final labor adjustment after finalize"
+}
+===== CASE_RUN_12 =====
+{
+    "smoke":  "PHASE4_OK",
+    "case_no":  "P4-20260310160031",
+    "case_id":  "62cb5527-afc8-4df7-b269-02a84e13587b",
+    "case_item_id":  "34aa000e-4060-4036-8703-4a156a0466e3",
+    "estimate_id":  "3869c694-c131-4176-9d8d-9211ff73f215",
+    "approve_decision":  "Approved",
+    "finalize_state":  "FINALIZED",
+    "lock_flag":  true,
+    "override_count":  1,
+    "overridden_invoice_total_paise":  25370,
+    "credit_note_no":  "CN-2026-0310103040",
+    "estimate_invoice_state_after_credit":  "FINALIZED",
+    "last_override_reason":  "Customer final labor adjustment after finalize"
+}
+===== CASE_RUN_13 =====
+{
+    "smoke":  "PHASE4_OK",
+    "case_no":  "P4-20260310160041",
+    "case_id":  "fabeac38-5a9c-4680-8637-ae3f741c9a5d",
+    "case_item_id":  "27acf9b7-9298-488f-a1c1-37135516ecfe",
+    "estimate_id":  "32fa0e85-42f9-4ef3-8b40-fed5048cc33f",
+    "approve_decision":  "Approved",
+    "finalize_state":  "FINALIZED",
+    "lock_flag":  true,
+    "override_count":  1,
+    "overridden_invoice_total_paise":  25370,
+    "credit_note_no":  "CN-2026-0310103051",
+    "estimate_invoice_state_after_credit":  "FINALIZED",
+    "last_override_reason":  "Customer final labor adjustment after finalize"
+}
+===== CASE_RUN_14 =====
+{
+    "smoke":  "PHASE4_OK",
+    "case_no":  "P4-20260310160052",
+    "case_id":  "495c8b44-b4bb-49ba-a29e-2431cd31e6cb",
+    "case_item_id":  "4aacf1c8-a6bc-4bcf-b9ed-71d7ac8f8ab2",
+    "estimate_id":  "3c7d3bfb-5c88-42c4-99d7-acc422e1cbc5",
+    "approve_decision":  "Approved",
+    "finalize_state":  "FINALIZED",
+    "lock_flag":  true,
+    "override_count":  1,
+    "overridden_invoice_total_paise":  25370,
+    "credit_note_no":  "CN-2026-0310103100",
+    "estimate_invoice_state_after_credit":  "FINALIZED",
+    "last_override_reason":  "Customer final labor adjustment after finalize"
+}
+===== CASE_RUN_15 =====
+{
+    "smoke":  "PHASE4_OK",
+    "case_no":  "P4-20260310160101",
+    "case_id":  "0a228b03-417b-4da3-8b99-c8aba919a2e8",
+    "case_item_id":  "c426b273-117e-4e97-88ec-7f18b65d1f88",
+    "estimate_id":  "d3b849db-fdb6-4f66-b787-5adcb4742983",
+    "approve_decision":  "Approved",
+    "finalize_state":  "FINALIZED",
+    "lock_flag":  true,
+    "override_count":  1,
+    "overridden_invoice_total_paise":  25370,
+    "credit_note_no":  "CN-2026-0310103110",
+    "estimate_invoice_state_after_credit":  "FINALIZED",
+    "last_override_reason":  "Customer final labor adjustment after finalize"
+}
+===== CASE_RUN_16 =====
+{
+    "smoke":  "PHASE4_OK",
+    "case_no":  "P4-20260310160111",
+    "case_id":  "338af5e9-b8b1-4686-b273-896ec6eac73d",
+    "case_item_id":  "0ef078df-0174-48f4-8bf9-06199027bf1c",
+    "estimate_id":  "f552f098-b4f7-498f-9010-ae4e6fc846f9",
+    "approve_decision":  "Approved",
+    "finalize_state":  "FINALIZED",
+    "lock_flag":  true,
+    "override_count":  1,
+    "overridden_invoice_total_paise":  25370,
+    "credit_note_no":  "CN-2026-0310103120",
+    "estimate_invoice_state_after_credit":  "FINALIZED",
+    "last_override_reason":  "Customer final labor adjustment after finalize"
+}
+===== CASE_RUN_17 =====
+{
+    "smoke":  "PHASE4_OK",
+    "case_no":  "P4-20260310160120",
+    "case_id":  "ba64c986-ad43-4558-8613-86df045e6e49",
+    "case_item_id":  "7db6b7e4-7a79-49e3-9bbe-b01db802d069",
+    "estimate_id":  "baf8c5f6-0063-431e-b85d-ae7472f33422",
+    "approve_decision":  "Approved",
+    "finalize_state":  "FINALIZED",
+    "lock_flag":  true,
+    "override_count":  1,
+    "overridden_invoice_total_paise":  25370,
+    "credit_note_no":  "CN-2026-0310103129",
+    "estimate_invoice_state_after_credit":  "FINALIZED",
+    "last_override_reason":  "Customer final labor adjustment after finalize"
+}
+===== CASE_RUN_18 =====
+{
+    "smoke":  "PHASE4_OK",
+    "case_no":  "P4-20260310160130",
+    "case_id":  "9d208d1c-51fc-4335-ba05-424142d9b6e5",
+    "case_item_id":  "bfab150d-3e78-4d34-ab59-692d37f36174",
+    "estimate_id":  "96e53a0e-ff4e-4377-86b8-11a427739d0e",
+    "approve_decision":  "Approved",
+    "finalize_state":  "FINALIZED",
+    "lock_flag":  true,
+    "override_count":  1,
+    "overridden_invoice_total_paise":  25370,
+    "credit_note_no":  "CN-2026-0310103138",
+    "estimate_invoice_state_after_credit":  "FINALIZED",
+    "last_override_reason":  "Customer final labor adjustment after finalize"
+}
+===== CASE_RUN_19 =====
+{
+    "smoke":  "PHASE4_OK",
+    "case_no":  "P4-20260310160139",
+    "case_id":  "df37a229-7a95-45f6-ba3f-35974d630556",
+    "case_item_id":  "1fed877d-7b67-448d-9c78-b3b4ae36662c",
+    "estimate_id":  "5f97e940-be2a-48fa-9eeb-0e52479ae432",
+    "approve_decision":  "Approved",
+    "finalize_state":  "FINALIZED",
+    "lock_flag":  true,
+    "override_count":  1,
+    "overridden_invoice_total_paise":  25370,
+    "credit_note_no":  "CN-2026-0310103147",
+    "estimate_invoice_state_after_credit":  "FINALIZED",
+    "last_override_reason":  "Customer final labor adjustment after finalize"
+}
+===== CASE_RUN_20 =====
+{
+    "smoke":  "PHASE4_OK",
+    "case_no":  "P4-20260310160148",
+    "case_id":  "7c8182a1-756a-413e-bc89-dac6abea3f94",
+    "case_item_id":  "7ebf7f9e-5ae5-4ba7-92a4-9cd7422fc1bb",
+    "estimate_id":  "35a1003c-d064-46e0-be8e-6ceedc96aedd",
+    "approve_decision":  "Approved",
+    "finalize_state":  "FINALIZED",
+    "lock_flag":  true,
+    "override_count":  1,
+    "overridden_invoice_total_paise":  25370,
+    "credit_note_no":  "CN-2026-0310103156",
+    "estimate_invoice_state_after_credit":  "FINALIZED",
+    "last_override_reason":  "Customer final labor adjustment after finalize"
+}
+

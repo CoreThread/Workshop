@@ -1,0 +1,11 @@
+﻿{
+    "smoke":  "RELEASE_PROD_GATE_OK",
+    "checks":  {
+                   "smoke_phase6_archive_prod.ps1":  "PHASE6_ARCHIVE_PROD_OK",
+                   "smoke_phase8_prod.ps1":  "PHASE8_PROD_OK",
+                   "smoke_phase8_roles_prod.ps1":  "PHASE8_ROLE_PROD_OK",
+                   "smoke_phase8_hardening_prod.ps1":  "PHASE8_HARDENING_PROD_OK",
+                   "smoke_phase9_prod.ps1":  "PHASE9_PROD_OK"
+               }
+}
+

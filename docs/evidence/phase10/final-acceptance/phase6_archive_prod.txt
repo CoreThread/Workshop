@@ -1,0 +1,16 @@
+﻿{
+    "smoke":  "PHASE6_ARCHIVE_PROD_OK",
+    "base_url":  "https://workshop-api.jaiswal-utkarshuj.workers.dev",
+    "db_usage_snapshot_id":  "29655883-a15a-41ce-85e8-6a17a07d4784",
+    "utilization_pct":  95,
+    "threshold_pct":  90,
+    "trigger_ready":  true,
+    "case_no":  "P6A-PROD-20260310160221",
+    "case_id":  "fdc85ddb-a2de-4230-bb0c-17385890aed9",
+    "archive_id":  "435b25e9-1f64-4c18-a006-d05884cdb234",
+    "archive_checksum_verified":  true,
+    "archive_restore_status":  "RESTORED",
+    "archive_index_rows":  1,
+    "restored_index_rows":  1
+}
+

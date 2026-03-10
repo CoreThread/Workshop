@@ -1,0 +1,12 @@
+﻿{
+    "smoke":  "PHASE9_PROD_OK",
+    "base_url":  "https://workshop-api.jaiswal-utkarshuj.workers.dev",
+    "employee_code":  "EMP-P9-PROD-20260310160247",
+    "attendance_id":  "188e64f7-bba8-499c-be49-44e029788d70",
+    "attendance_rows":  1,
+    "advance_id":  "fa37235c-445e-4af6-bcde-a8bcefe132af",
+    "advance_rows":  1,
+    "summary_attendance_rows":  13,
+    "summary_open_outstanding_paise":  5700000
+}
+

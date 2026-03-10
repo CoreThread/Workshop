@@ -337,6 +337,22 @@ function normalizeEstimateDecision(value) {
   return "";
 }
 
+function normalizeAttendanceStatus(value) {
+  if (!ensureNonEmptyString(value)) return "";
+  const raw = value.trim().toLowerCase();
+  if (raw === "present") return "Present";
+  if (raw === "halfday" || raw === "half_day" || raw === "half-day") return "HalfDay";
+  if (raw === "leave") return "Leave";
+  return "";
+}
+
+function normalizeAdvanceStatus(value) {
+  if (!ensureNonEmptyString(value)) return "";
+  const raw = value.trim().toUpperCase();
+  if (["OPEN", "PARTIAL", "SETTLED", "WAIVED"].includes(raw)) return raw;
+  return "";
+}
+
 function estimateStatusFromDecision(decision) {
   if (decision === "Approved") return "Approved";
   if (decision === "Rejected") return "Rejected";
@@ -3152,6 +3168,334 @@ export default {
             by_category_paise: expenseByCategory,
             by_category_top: expenseByCategoryTop,
             daily_expense_paise: expenseDailyTrend
+          }
+        }
+      });
+    }
+
+    if (request.method === "GET" && url.pathname === "/v1/hr/attendance") {
+      const auth = await requireAuth(request, env);
+      if (auth.error) return auth.error;
+      if (!requireRole(auth.user, ["Admin"])) {
+        return json(403, { code: "FORBIDDEN", message: "Admin role required for HR attendance" });
+      }
+
+      const { limit, offset } = getPagination(url);
+      const employeeCode = (url.searchParams.get("employee_code") || "").trim();
+      const fromDate = (url.searchParams.get("from_date") || "").trim();
+      const toDate = (url.searchParams.get("to_date") || "").trim();
+      const statusFilter = normalizeAttendanceStatus(url.searchParams.get("attendance_status") || "");
+
+      let query = auth.serviceClient
+        .from("employee_attendance")
+        .select("id, employee_code, employee_name, business_date_local, attendance_status, hours_worked, notes, is_active, created_at, updated_at")
+        .eq("tenant_id", auth.user.tenantId)
+        .eq("is_active", true)
+        .order("business_date_local", { ascending: false })
+        .order("created_at", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (employeeCode) query = query.eq("employee_code", employeeCode);
+      if (isValidDateLocal(fromDate)) query = query.gte("business_date_local", fromDate);
+      if (isValidDateLocal(toDate)) query = query.lte("business_date_local", toDate);
+      if (statusFilter) query = query.eq("attendance_status", statusFilter);
+
+      try {
+        const result = await withTimeout(query, LIST_QUERY_TIMEOUT_MS, "HR_ATTENDANCE_QUERY_TIMEOUT");
+        if (result.error) return json(500, { code: "HR_ATTENDANCE_FETCH_FAILED", message: "Unable to fetch attendance rows" });
+
+        return json(200, {
+          code: "OK",
+          data: result.data || [],
+          filters: {
+            employee_code: employeeCode || null,
+            from_date: isValidDateLocal(fromDate) ? fromDate : null,
+            to_date: isValidDateLocal(toDate) ? toDate : null,
+            attendance_status: statusFilter || null
+          },
+          pagination: { limit, offset }
+        });
+      } catch {
+        return json(504, { code: "HR_ATTENDANCE_QUERY_TIMEOUT", message: "Attendance query timed out" });
+      }
+    }
+
+    if (request.method === "POST" && url.pathname === "/v1/hr/attendance") {
+      const auth = await requireAuth(request, env);
+      if (auth.error) return auth.error;
+      if (!requireRole(auth.user, ["Admin"])) {
+        return json(403, { code: "FORBIDDEN", message: "Admin role required for HR attendance" });
+      }
+
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return json(400, { code: "INVALID_JSON", message: "Request body must be valid JSON" });
+      }
+
+      const employeeCode = ensureNonEmptyString(body?.employee_code) ? body.employee_code.trim() : "";
+      const employeeName = ensureNonEmptyString(body?.employee_name) ? body.employee_name.trim() : "";
+      const attendanceStatus = normalizeAttendanceStatus(body?.attendance_status);
+      const hoursWorked = parseNumericQty(body?.hours_worked, null);
+      const businessDateLocal = isValidDateLocal(body?.business_date_local)
+        ? String(body.business_date_local).trim()
+        : getBusinessDateInTimezone(env.DEFAULT_TIMEZONE || "Asia/Kolkata");
+
+      if (!employeeCode) return json(400, { code: "VALIDATION_ERROR", message: "employee_code is required" });
+      if (!employeeName) return json(400, { code: "VALIDATION_ERROR", message: "employee_name is required" });
+      if (!attendanceStatus) {
+        return json(400, { code: "VALIDATION_ERROR", message: "attendance_status must be Present, HalfDay, or Leave" });
+      }
+      if (hoursWorked !== null && (!Number.isFinite(hoursWorked) || hoursWorked < 0)) {
+        return json(400, { code: "VALIDATION_ERROR", message: "hours_worked must be a non-negative number" });
+      }
+
+      const nowIso = new Date().toISOString();
+      const payload = {
+        tenant_id: auth.user.tenantId,
+        employee_code: employeeCode,
+        employee_name: employeeName,
+        business_date_local: businessDateLocal,
+        attendance_status: attendanceStatus,
+        hours_worked: hoursWorked,
+        notes: ensureNonEmptyString(body?.notes) ? body.notes.trim() : null,
+        is_active: body?.is_active === undefined ? true : Boolean(body.is_active),
+        updated_at: nowIso,
+        updated_by: auth.user.id,
+        created_at: nowIso,
+        created_by: auth.user.id
+      };
+
+      const { data, error } = await auth.serviceClient
+        .from("employee_attendance")
+        .upsert(payload, { onConflict: "tenant_id,employee_code,business_date_local" })
+        .select("id, employee_code, employee_name, business_date_local, attendance_status, hours_worked, notes, is_active, created_at, updated_at")
+        .single();
+
+      if (error) {
+        const mapped = mapDbRuleError(error, "HR_ATTENDANCE_SAVE_FAILED", "Attendance payload violates database rules");
+        if (mapped) return json(mapped.status, { code: mapped.code, message: mapped.message });
+        return json(500, { code: "HR_ATTENDANCE_SAVE_FAILED", message: "Unable to save attendance row" });
+      }
+
+      return json(200, { code: "OK", message: "Attendance saved", data });
+    }
+
+    if (request.method === "GET" && url.pathname === "/v1/hr/advances") {
+      const auth = await requireAuth(request, env);
+      if (auth.error) return auth.error;
+      if (!requireRole(auth.user, ["Admin"])) {
+        return json(403, { code: "FORBIDDEN", message: "Admin role required for HR advances" });
+      }
+
+      const { limit, offset } = getPagination(url);
+      const employeeCode = (url.searchParams.get("employee_code") || "").trim();
+      const status = normalizeAdvanceStatus(url.searchParams.get("status") || "");
+      const fromDate = (url.searchParams.get("from_date") || "").trim();
+      const toDate = (url.searchParams.get("to_date") || "").trim();
+
+      let query = auth.serviceClient
+        .from("employee_advances")
+        .select("id, employee_code, employee_name, advance_date_local, amount_paise, settled_amount_paise, repayment_due_date_local, status, reason, notes, is_active, created_at, updated_at")
+        .eq("tenant_id", auth.user.tenantId)
+        .eq("is_active", true)
+        .order("advance_date_local", { ascending: false })
+        .order("created_at", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (employeeCode) query = query.eq("employee_code", employeeCode);
+      if (status) query = query.eq("status", status);
+      if (isValidDateLocal(fromDate)) query = query.gte("advance_date_local", fromDate);
+      if (isValidDateLocal(toDate)) query = query.lte("advance_date_local", toDate);
+
+      try {
+        const result = await withTimeout(query, LIST_QUERY_TIMEOUT_MS, "HR_ADVANCES_QUERY_TIMEOUT");
+        if (result.error) return json(500, { code: "HR_ADVANCES_FETCH_FAILED", message: "Unable to fetch employee advances" });
+
+        return json(200, {
+          code: "OK",
+          data: result.data || [],
+          filters: {
+            employee_code: employeeCode || null,
+            status: status || null,
+            from_date: isValidDateLocal(fromDate) ? fromDate : null,
+            to_date: isValidDateLocal(toDate) ? toDate : null
+          },
+          pagination: { limit, offset }
+        });
+      } catch {
+        return json(504, { code: "HR_ADVANCES_QUERY_TIMEOUT", message: "Employee advances query timed out" });
+      }
+    }
+
+    if (request.method === "POST" && url.pathname === "/v1/hr/advances") {
+      const auth = await requireAuth(request, env);
+      if (auth.error) return auth.error;
+      if (!requireRole(auth.user, ["Admin"])) {
+        return json(403, { code: "FORBIDDEN", message: "Admin role required for HR advances" });
+      }
+
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return json(400, { code: "INVALID_JSON", message: "Request body must be valid JSON" });
+      }
+
+      const employeeCode = ensureNonEmptyString(body?.employee_code) ? body.employee_code.trim() : "";
+      const employeeName = ensureNonEmptyString(body?.employee_name) ? body.employee_name.trim() : "";
+      const amountPaise = parsePaise(body?.amount_paise, -1);
+      const settledAmountPaise = parsePaise(body?.settled_amount_paise, 0);
+      const status = normalizeAdvanceStatus(body?.status || "OPEN") || "OPEN";
+      const advanceDateLocal = isValidDateLocal(body?.advance_date_local)
+        ? String(body.advance_date_local).trim()
+        : getBusinessDateInTimezone(env.DEFAULT_TIMEZONE || "Asia/Kolkata");
+      const repaymentDueDateLocal = isValidDateLocal(body?.repayment_due_date_local)
+        ? String(body.repayment_due_date_local).trim()
+        : null;
+
+      if (!employeeCode) return json(400, { code: "VALIDATION_ERROR", message: "employee_code is required" });
+      if (!employeeName) return json(400, { code: "VALIDATION_ERROR", message: "employee_name is required" });
+      if (!Number.isInteger(amountPaise) || amountPaise < 0) {
+        return json(400, { code: "VALIDATION_ERROR", message: "amount_paise must be a non-negative paise integer" });
+      }
+      if (!Number.isInteger(settledAmountPaise) || settledAmountPaise < 0) {
+        return json(400, { code: "VALIDATION_ERROR", message: "settled_amount_paise must be a non-negative paise integer" });
+      }
+      if (settledAmountPaise > amountPaise) {
+        return json(400, { code: "VALIDATION_ERROR", message: "settled_amount_paise cannot exceed amount_paise" });
+      }
+
+      const nowIso = new Date().toISOString();
+      const payload = {
+        tenant_id: auth.user.tenantId,
+        employee_code: employeeCode,
+        employee_name: employeeName,
+        advance_date_local: advanceDateLocal,
+        amount_paise: amountPaise,
+        settled_amount_paise: settledAmountPaise,
+        repayment_due_date_local: repaymentDueDateLocal,
+        status,
+        reason: ensureNonEmptyString(body?.reason) ? body.reason.trim() : null,
+        notes: ensureNonEmptyString(body?.notes) ? body.notes.trim() : null,
+        is_active: body?.is_active === undefined ? true : Boolean(body.is_active),
+        created_at: nowIso,
+        updated_at: nowIso,
+        created_by: auth.user.id,
+        updated_by: auth.user.id
+      };
+
+      const { data, error } = await auth.serviceClient
+        .from("employee_advances")
+        .insert(payload)
+        .select("id, employee_code, employee_name, advance_date_local, amount_paise, settled_amount_paise, repayment_due_date_local, status, reason, notes, is_active, created_at, updated_at")
+        .single();
+
+      if (error) {
+        const mapped = mapDbRuleError(error, "HR_ADVANCE_CREATE_FAILED", "Employee advance payload violates database rules");
+        if (mapped) return json(mapped.status, { code: mapped.code, message: mapped.message });
+        return json(500, { code: "HR_ADVANCE_CREATE_FAILED", message: "Unable to create employee advance" });
+      }
+
+      return json(201, { code: "OK", message: "Employee advance created", data });
+    }
+
+    if (request.method === "GET" && url.pathname === "/v1/hr/summary") {
+      const auth = await requireAuth(request, env);
+      if (auth.error) return auth.error;
+      if (!requireRole(auth.user, ["Admin"])) {
+        return json(403, { code: "FORBIDDEN", message: "Admin role required for HR summary" });
+      }
+
+      const days = Math.max(1, Math.min(90, toSafeInt(url.searchParams.get("days"), 30)));
+      const queryTimeoutMs = Math.max(1000, Math.min(12000, toSafeInt(url.searchParams.get("query_timeout_ms"), 7000)));
+      const sinceBusinessDateLocal = getBusinessDateInTimezone(
+        env.DEFAULT_TIMEZONE || "Asia/Kolkata",
+        new Date(Date.now() - (days * 24 * 60 * 60 * 1000)).toISOString()
+      );
+
+      let attendanceRows;
+      let advancesRows;
+      try {
+        const [attendanceResult, advancesResult] = await Promise.all([
+          withTimeout(
+            auth.serviceClient
+              .from("employee_attendance")
+              .select("employee_code, attendance_status, business_date_local")
+              .eq("tenant_id", auth.user.tenantId)
+              .eq("is_active", true)
+              .gte("business_date_local", sinceBusinessDateLocal),
+            queryTimeoutMs,
+            "HR_SUMMARY_QUERY_TIMEOUT"
+          ),
+          withTimeout(
+            auth.serviceClient
+              .from("employee_advances")
+              .select("employee_code, amount_paise, settled_amount_paise, status, advance_date_local")
+              .eq("tenant_id", auth.user.tenantId)
+              .eq("is_active", true)
+              .gte("advance_date_local", sinceBusinessDateLocal),
+            queryTimeoutMs,
+            "HR_SUMMARY_QUERY_TIMEOUT"
+          )
+        ]);
+
+        if (attendanceResult.error) return json(500, { code: "HR_SUMMARY_FETCH_FAILED", message: "Unable to fetch attendance summary slice" });
+        if (advancesResult.error) return json(500, { code: "HR_SUMMARY_FETCH_FAILED", message: "Unable to fetch advances summary slice" });
+
+        attendanceRows = attendanceResult.data || [];
+        advancesRows = advancesResult.data || [];
+      } catch {
+        return json(504, { code: "HR_SUMMARY_QUERY_TIMEOUT", message: "HR summary query timed out" });
+      }
+
+      const attendanceByStatus = {
+        Present: 0,
+        HalfDay: 0,
+        Leave: 0
+      };
+      const uniqueAttendanceEmployees = new Set();
+      for (const row of attendanceRows) {
+        const status = normalizeAttendanceStatus(row.attendance_status);
+        if (status && attendanceByStatus[status] !== undefined) {
+          attendanceByStatus[status] += 1;
+        }
+        if (ensureNonEmptyString(row.employee_code)) uniqueAttendanceEmployees.add(row.employee_code);
+      }
+
+      let advancesTotalPaise = 0;
+      let settledTotalPaise = 0;
+      let openOutstandingPaise = 0;
+      const uniqueAdvanceEmployees = new Set();
+      for (const row of advancesRows) {
+        const amount = toSafeInt(row.amount_paise, 0);
+        const settled = toSafeInt(row.settled_amount_paise, 0);
+        advancesTotalPaise += amount;
+        settledTotalPaise += settled;
+        const rowStatus = normalizeAdvanceStatus(row.status);
+        if (rowStatus === "OPEN" || rowStatus === "PARTIAL") {
+          openOutstandingPaise += Math.max(0, amount - settled);
+        }
+        if (ensureNonEmptyString(row.employee_code)) uniqueAdvanceEmployees.add(row.employee_code);
+      }
+
+      return json(200, {
+        code: "OK",
+        data: {
+          window_days: days,
+          since_business_date_local: sinceBusinessDateLocal,
+          attendance: {
+            total_rows: attendanceRows.length,
+            employees_covered: uniqueAttendanceEmployees.size,
+            by_status: attendanceByStatus
+          },
+          advances: {
+            total_rows: advancesRows.length,
+            employees_covered: uniqueAdvanceEmployees.size,
+            total_amount_paise: advancesTotalPaise,
+            total_settled_paise: settledTotalPaise,
+            open_outstanding_paise: openOutstandingPaise
           }
         }
       });

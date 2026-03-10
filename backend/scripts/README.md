@@ -1,5 +1,35 @@
 # Backend Smoke Script Quick Runbook
 
+## Local preflight helper (health + auth)
+- Before local wrapper runs, preflight is executed automatically:
+  - `./preflight_local_smoke.ps1`
+- Success marker:
+  - `LOCAL_SMOKE_PREFLIGHT_OK`
+- Optional env overrides:
+  - `WORKSHOP_LOCAL_API_BASE`
+  - `WORKSHOP_ADMIN_EMAIL`
+  - `WORKSHOP_ADMIN_PASSWORD`
+
+## Prod-only release gate (CI-safe)
+- Runs release confidence checks against production only (no local dependency):
+  - `cd backend/scripts`
+  - `./smoke_release_prod_gate.ps1`
+- Optional machine-readable output file:
+  - `./smoke_release_prod_gate.ps1 -ResultPath ../../artifacts/release_prod_gate_result.json`
+- Success marker:
+  - `RELEASE_PROD_GATE_OK`
+- JSON output fields:
+  - `smoke`
+  - `gate_timestamp_utc`
+  - `total_duration_ms`
+  - `checks[]` with `script`, `marker`, `passed`, `duration_ms`
+- Included prod checks:
+  - `smoke_phase6_archive_prod.ps1`
+  - `smoke_phase8_prod.ps1`
+  - `smoke_phase8_roles_prod.ps1`
+  - `smoke_phase8_hardening_prod.ps1`
+  - `smoke_phase9_prod.ps1`
+
 ## Archive smoke one-command helper
 - Wrapper script (runs local then prod):
   - `cd backend/scripts`
@@ -99,3 +129,19 @@
 - Local success marker: `PHASE8_HARDENING_LOCAL_OK`
 - Prod success marker: `PHASE8_HARDENING_PROD_OK`
 - Wrapper success marker: `PHASE8_HARDENING_ALL_OK`
+
+## Phase 9 HR smoke scripts
+- Local:
+  - `cd backend`
+  - `./scripts/smoke_phase9_local.ps1`
+- Prod:
+  - `cd backend`
+  - `./scripts/smoke_phase9_prod.ps1`
+- Wrapper (local then prod):
+  - `cd backend/scripts`
+  - `./smoke_phase9_all.ps1`
+
+## Expected Phase 9 markers
+- Local success marker: `PHASE9_LOCAL_OK`
+- Prod success marker: `PHASE9_PROD_OK`
+- Wrapper success marker: `PHASE9_ALL_OK`

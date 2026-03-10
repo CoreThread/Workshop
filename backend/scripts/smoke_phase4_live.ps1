@@ -1,10 +1,35 @@
 $ErrorActionPreference = 'Stop'
 
-$base = "http://127.0.0.1:8788"
 $adminEmail = "admin@rajeshelec.local"
 $adminPassword = "Admin@12345!"
 $stamp = Get-Date -Format 'yyyyMMddHHmmss'
 $caseNo = "P4-$stamp"
+
+function Resolve-BaseUrl() {
+  if ($env:WORKSHOP_LOCAL_API_BASE) {
+    return $env:WORKSHOP_LOCAL_API_BASE.TrimEnd("/")
+  }
+
+  $candidates = @(
+    "http://127.0.0.1:8788",
+    "http://127.0.0.1:8787"
+  )
+
+  foreach ($candidate in $candidates) {
+    try {
+      $health = Invoke-RestMethod -Method Get -Uri "$candidate/health" -TimeoutSec 3
+      if ($health.ok -eq $true) {
+        return $candidate
+      }
+    } catch {
+      # try next candidate
+    }
+  }
+
+  throw "LOCAL_API_NOT_REACHABLE"
+}
+
+$base = Resolve-BaseUrl
 
 $login = Invoke-RestMethod -Method Post -Uri "$base/v1/auth/login" -ContentType "application/json" -Body (@{
   email = $adminEmail

@@ -1,6 +1,5 @@
 $ErrorActionPreference = "Stop"
 
-$base = "http://127.0.0.1:8788"
 $itEmail = if ($env:WORKSHOP_IT_EMAIL) { $env:WORKSHOP_IT_EMAIL } else { "it@rajeshelec.local" }
 $itPassword = if ($env:WORKSHOP_IT_PASSWORD) { $env:WORKSHOP_IT_PASSWORD } else { "Admin@12345!" }
 $staffEmail = if ($env:WORKSHOP_STAFF_EMAIL) { $env:WORKSHOP_STAFF_EMAIL } else { "staff@rajeshelec.local" }
@@ -16,6 +15,32 @@ function Ensure-OkResponse([object]$response, [string]$errorCode) {
     throw $errorCode
   }
 }
+
+function Resolve-BaseUrl() {
+  if ($env:WORKSHOP_LOCAL_API_BASE) {
+    return $env:WORKSHOP_LOCAL_API_BASE.TrimEnd("/")
+  }
+
+  $candidates = @(
+    "http://127.0.0.1:8788",
+    "http://127.0.0.1:8787"
+  )
+
+  foreach ($candidate in $candidates) {
+    try {
+      $health = Invoke-RestMethod -Method Get -Uri "$candidate/health" -TimeoutSec 3
+      if ($health.ok -eq $true) {
+        return $candidate
+      }
+    } catch {
+      # try next candidate
+    }
+  }
+
+  throw "LOCAL_API_NOT_REACHABLE"
+}
+
+$base = Resolve-BaseUrl
 
 function Login-And-LoadAnalytics([string]$email, [string]$password) {
   $loginRes = Invoke-RestMethod -Method Post -Uri "$base/v1/auth/login" -ContentType "application/json" -Body (To-JsonBody @{ email = $email; password = $password })

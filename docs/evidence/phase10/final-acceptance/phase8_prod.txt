@@ -1,0 +1,16 @@
+﻿{
+    "smoke":  "PHASE8_PROD_OK",
+    "base_url":  "https://workshop-api.jaiswal-utkarshuj.workers.dev",
+    "role":  "Admin",
+    "window_days":  30,
+    "received_cases":  57,
+    "pending_approvals":  5,
+    "pending_pickups":  0,
+    "consumption_events":  4,
+    "inventory_daily_points":  1,
+    "expenses_total_paise":  64000,
+    "expense_daily_points":  1,
+    "finance_visibility":  "full",
+    "revenue_daily_points":  3
+}
+
