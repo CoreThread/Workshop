@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Workshop Phase 2-8 UI</title>
+  <title>Workshop Ops Console</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
@@ -12,608 +12,551 @@
 <body>
   <main class="container app-shell">
     <header class="hero card">
-      <h1>Workshop Ops Console</h1>
-      <p class="subtitle">Phase 2-8 Controls with Priority Workflow for Case, Follow-up, Inventory, Archive, and Analytics</p>
+      <div>
+        <h1>Workshop Ops Console</h1>
+        <p class="subtitle">Simple, ordered, and workflow-first operations for Case, Follow-up, Backup, Inventory, Analytics, and HR.</p>
+      </div>
+      <div id="sessionDock" class="session-dock is-hidden">
+        <span id="whoamiTop" class="session-user">Admin</span>
+        <button id="logoutTopBtn" class="ghost">Logout</button>
+      </div>
+      <div class="hero-badges">
+        <span class="chip"><strong>Primary</strong> Case + Follow-up + Backup</span>
+        <span class="chip"><strong>Secondary</strong> Inventory</span>
+        <span class="chip"><strong>Tertiary</strong> Analytics</span>
+        <span class="chip"><strong>Final</strong> HR</span>
+      </div>
     </header>
 
-    <section class="card">
-      <h2>Connection</h2>
-      <label>API Base URL</label>
-      <input id="apiBase" value="http://127.0.0.1:8790" />
-      <button id="saveApiBase">Save API Base</button>
+    <section class="card auth-card" id="setup">
+      <div class="split-two">
+        <div>
+          <h2>Connection</h2>
+          <label>API Base URL</label>
+          <input id="apiBase" value="https://workshop-api.jaiswal-utkarshuj.workers.dev" />
+          <button id="saveApiBase">Save API Base</button>
+        </div>
+        <div>
+          <h2>Login</h2>
+          <label>Email</label>
+          <input id="email" value="admin@rajeshelec.local" />
+          <label>Password</label>
+          <input id="password" type="password" value="Admin@12345!" />
+          <div class="row">
+            <button id="loginBtn">Login</button>
+            <button id="logoutBtn" class="ghost">Logout</button>
+          </div>
+          <p id="whoami" class="hint">Not logged in</p>
+          <p id="loginGateHint" class="hint">Login required to open operational lanes.</p>
+        </div>
+      </div>
     </section>
 
-    <section class="card compact-grid">
-      <h2>Login</h2>
-      <label>Email</label>
-      <input id="email" value="admin@rajeshelec.local" />
-      <label>Password</label>
-      <input id="password" type="password" value="Admin@12345!" />
-      <div class="row">
-        <button id="loginBtn">Login</button>
-        <button id="logoutBtn" class="ghost">Logout</button>
+    <div id="appWorkspace" class="is-hidden">
+    <section class="card quick-strip" id="quickActionsStrip">
+      <h2>Quick Actions</h2>
+      <p class="hint">One-tap daily actions for the highest-frequency workflow.</p>
+      <div class="quick-actions-grid">
+        <button id="quickCreateCaseBtn">Create Case</button>
+        <button id="quickLoadFollowupsBtn" class="ghost">Load Follow-ups</button>
+        <button id="quickRunDailyCloseBtn" class="ghost">Run Daily Close</button>
+        <button id="quickLoadArchiveIndexBtn" class="ghost">Load Archive Index</button>
       </div>
-      <p id="whoami" class="hint">Not logged in</p>
+      <p id="quickActionsHint" class="hint"></p>
     </section>
 
-    <section class="card phase4-card">
-      <h2>Phase 4 Billing Workflow</h2>
-      <p class="hint">Use this path in sequence: Create Estimate -> Customer Decision -> Finalize Lock -> Override (if needed) -> Credit Note -> Verify Snapshot.</p>
-
-      <div class="workflow-grid">
-        <div>
-          <label>Case ID</label>
-          <input id="estimateCaseId" placeholder="case_id" />
-        </div>
-        <div>
-          <label>Case Item ID</label>
-          <input id="estimateItemId" placeholder="case_item_id" />
-        </div>
-        <div class="context-actions">
-          <button id="syncContextBtn" class="ghost">Sync Context from Status Panel</button>
-        </div>
-        <div>
-          <label>Estimate ID</label>
-          <input id="estimateId" placeholder="estimate_id" />
-        </div>
+    <section class="card workspace-switcher" id="workspaceSwitcher">
+      <h2>Workspace</h2>
+      <p class="hint">Open one lane at a time to keep the interface focused.</p>
+      <div class="workspace-tabs" role="tablist" aria-label="Lane workspace switcher">
+        <button id="tabLanePrimary" class="lane-tab" data-lane-target="lane-primary" role="tab" aria-selected="true">Core Ops</button>
+        <button id="tabLaneInventory" class="lane-tab ghost" data-lane-target="lane-inventory" role="tab" aria-selected="false">Inventory</button>
+        <button id="tabLaneAnalytics" class="lane-tab ghost" data-lane-target="lane-analytics" role="tab" aria-selected="false">Analytics</button>
+        <button id="tabLaneHr" class="lane-tab ghost" data-lane-target="lane-hr" role="tab" aria-selected="false">HR</button>
       </div>
-
-      <div class="phase4-chips">
-        <span class="chip"><strong>Invoice State</strong> <span id="invoiceStateChip">NA</span></span>
-        <span class="chip"><strong>Locked</strong> <span id="lockedChip">NA</span></span>
-        <span class="chip"><strong>Overrides</strong> <span id="overrideChip">0</span></span>
-        <span class="chip"><strong>Decision</strong> <span id="decisionChip">NA</span></span>
-      </div>
-
-      <h3>1) Estimate Input</h3>
-      <div class="workflow-grid">
-        <div>
-          <label>Labor (paise)</label>
-          <input id="laborPaise" value="12000" />
-        </div>
-        <div>
-          <label>Spare (paise)</label>
-          <input id="sparePaise" value="8000" />
-        </div>
-        <div>
-          <label>Other (paise)</label>
-          <input id="otherPaise" value="1000" />
-        </div>
-        <div>
-          <label>Discount (paise)</label>
-          <input id="discountPaise" value="500" />
-        </div>
-        <div>
-          <label>GST Required</label>
-          <select id="gstRequired">
-            <option value="true" selected>true</option>
-            <option value="false">false</option>
-          </select>
-        </div>
-        <div>
-          <label>Send For Decision</label>
-          <select id="sendForDecision">
-            <option value="true" selected>true</option>
-            <option value="false">false</option>
-          </select>
-        </div>
-      </div>
-
-      <div id="estimatePreview" class="preview-box"></div>
-      <button id="createEstimateBtn">Create Estimate</button>
-
-      <h3>2) Consent Decision</h3>
-      <div class="workflow-grid">
-        <div>
-          <label>Decision</label>
-          <select id="estimateDecision">
-            <option>Approved</option>
-            <option>Rejected</option>
-            <option>Pending</option>
-          </select>
-        </div>
-        <div>
-          <label>Decision Channel</label>
-          <select id="decisionChannel">
-            <option>call</option>
-            <option>in_person</option>
-            <option>whatsapp</option>
-            <option>sms</option>
-          </select>
-        </div>
-        <div>
-          <label>Decision By Name</label>
-          <input id="decisionByName" value="Ramesh" />
-        </div>
-        <div>
-          <label>Decision By Phone</label>
-          <input id="decisionByPhone" value="9876500011" />
-        </div>
-        <div>
-          <label>Consent Template Version</label>
-          <input id="consentTemplateVersion" value="estimate-v1" />
-        </div>
-        <div>
-          <label>Consent Text Snapshot</label>
-          <input id="consentTextSnapshot" value="Approved on call" />
-        </div>
-      </div>
-      <button id="setEstimateDecisionBtn" class="accent">Set Estimate Decision</button>
-
-      <h3>3) Finalize + Lock</h3>
-      <label>Finalize Reason</label>
-      <input id="finalizeReason" value="Finalize from UI" />
-      <label class="toggle-row"><input id="confirmFinalize" type="checkbox" /> I confirm this will lock financial values.</label>
-      <button id="finalizeEstimateBtn" class="warn">Finalize Estimate</button>
-
-      <h3>4) Override (After Finalize)</h3>
-      <div class="workflow-grid">
-        <div>
-          <label>Override Labor (paise)</label>
-          <input id="overrideLaborPaise" value="13000" />
-        </div>
-        <div>
-          <label>Override Spare (paise)</label>
-          <input id="overrideSparePaise" value="8000" />
-        </div>
-        <div>
-          <label>Override Other (paise)</label>
-          <input id="overrideOtherPaise" value="1000" />
-        </div>
-        <div>
-          <label>Override Discount (paise)</label>
-          <input id="overrideDiscountPaise" value="500" />
-        </div>
-      </div>
-      <label>Override Reason</label>
-      <input id="overrideReason" value="UI override after finalize" />
-      <label class="toggle-row"><input id="confirmOverride" type="checkbox" /> I confirm this creates an audited financial override.</label>
-      <button id="overrideEstimateBtn" class="warn">Override Finalized Estimate</button>
-
-      <h3>5) Credit Note</h3>
-      <div class="workflow-grid">
-        <div>
-          <label>Credit Note Amount (paise)</label>
-          <input id="creditAmountPaise" value="3000" />
-        </div>
-        <div>
-          <label>Credit Note Reason</label>
-          <input id="creditReason" value="Minor billing correction" />
-        </div>
-      </div>
-      <label class="toggle-row"><input id="confirmCreditNote" type="checkbox" /> I confirm this posts a non-destructive correction entry.</label>
-      <button id="createCreditNoteBtn" class="warn">Create Credit Note</button>
-
-      <div class="row">
-        <button id="getEstimateBtn" class="ghost">Get Estimate Snapshot</button>
-        <button id="listCaseEstimatesBtn" class="ghost">List Case Estimates</button>
-      </div>
-      <button id="loadLatestEstimateBtn" class="ghost">Use Latest Estimate From Case</button>
-
-      <pre id="phase4Highlights"></pre>
-      <pre id="phase4Result"></pre>
     </section>
 
-    <section class="card">
-      <h2>Phase 5 Inventory + Consumption</h2>
-      <p class="hint">Flow: Create inventory master -> Load/select inventory -> Consume on case -> Verify ledger using case consumption reference.</p>
-      <button id="runPhase5SmokePayloadBtn" class="ghost">Run Phase5 Smoke Payload Generator</button>
-      <pre id="phase5SmokePayloadResult"></pre>
+    <div class="layout-grid">
+      <aside class="card nav-card">
+        <h2>Quick Navigator</h2>
+        <p class="hint">Jump by operational flow, not by phase number.</p>
+        <a href="#lane-primary" class="jump-link" data-lane-target="lane-primary">1. Core Ops Lane</a>
+        <a href="#module-case" class="jump-link" data-lane-target="lane-primary">Case Intake + Status</a>
+        <a href="#module-followup" class="jump-link" data-lane-target="lane-primary">Follow-up + Daily Close</a>
+        <a href="#module-archive" class="jump-link" data-lane-target="lane-primary">Backup + Archive Admin</a>
+        <a href="#module-billing" class="jump-link" data-lane-target="lane-primary">Estimate + Billing Lock</a>
+        <a href="#lane-inventory" class="jump-link" data-lane-target="lane-inventory">2. Inventory Lane</a>
+        <a href="#lane-analytics" class="jump-link" data-lane-target="lane-analytics">3. Analytics Lane</a>
+        <a href="#lane-hr" class="jump-link" data-lane-target="lane-hr">4. HR Lane</a>
+      </aside>
 
-      <div class="workflow-grid">
-        <div>
-          <label>Case ID</label>
-          <input id="phase5CaseId" placeholder="case_id" />
-        </div>
-        <div>
-          <label>Case Item ID</label>
-          <input id="phase5CaseItemId" placeholder="case_item_id" />
-        </div>
-        <div>
-          <label>Inventory Item ID</label>
-          <input id="phase5InventoryItemId" placeholder="inventory_item_id" />
-        </div>
-        <div class="context-actions">
-          <button id="phase5SyncCaseBtn" class="ghost">Sync Case Context from Status Panel</button>
-        </div>
+      <div class="lanes">
+        <section class="lane" id="lane-primary">
+          <div class="lane-head">
+            <h2>Lane 1: Core Operations</h2>
+            <p class="hint">Daily first: case flow, follow-up, close snapshot, backup visibility.</p>
+          </div>
+
+          <details class="card" id="module-case" open>
+            <summary>Case Intake + Status (Phase 2)</summary>
+            <div class="workflow-grid">
+              <div>
+                <label>Case No</label>
+                <input id="caseNo" placeholder="AJ-101" />
+              </div>
+              <div>
+                <label>Item Category</label>
+                <input id="itemCategory" value="fan" />
+              </div>
+              <div>
+                <label>Customer Name</label>
+                <input id="customerName" placeholder="Ramesh" />
+              </div>
+              <div>
+                <label>Customer Phone</label>
+                <input id="customerPhone" placeholder="9876500011" />
+              </div>
+            </div>
+            <label>Reported Issue</label>
+            <input id="reportedIssue" placeholder="Not rotating" />
+            <button id="createCaseBtn">Create Case</button>
+            <p id="createResult" class="hint"></p>
+
+            <div class="workflow-grid">
+              <div>
+                <label>Search By Case No</label>
+                <input id="searchCaseNo" placeholder="AJ-101" />
+              </div>
+              <div>
+                <label>Search By Phone</label>
+                <input id="searchPhone" placeholder="9876500011" />
+              </div>
+            </div>
+            <button id="searchBtn" class="ghost">Search Cases</button>
+            <div id="searchResults"></div>
+
+            <div class="workflow-grid">
+              <div>
+                <label>Case ID</label>
+                <input id="statusCaseId" />
+              </div>
+              <div>
+                <label>Case Item ID</label>
+                <input id="statusItemId" />
+              </div>
+              <div>
+                <label>To Status</label>
+                <select id="toStatus">
+                  <option>Diagnosis</option>
+                  <option>WaitingApproval</option>
+                  <option>ApprovedForRepair</option>
+                  <option>RejectedByCustomer</option>
+                  <option>InRepair</option>
+                  <option>Ready</option>
+                  <option>Delivered</option>
+                  <option>Cancelled</option>
+                </select>
+              </div>
+              <div>
+                <label>Status Note</label>
+                <input id="statusNote" placeholder="optional note" />
+              </div>
+            </div>
+            <div class="row">
+              <button id="updateStatusBtn">Update Status</button>
+              <button id="historyBtn" class="ghost">Load Status History</button>
+            </div>
+            <p id="statusResult" class="hint"></p>
+            <pre id="history"></pre>
+          </details>
+
+          <details class="card" id="module-followup" open>
+            <summary>Follow-up + Daily Close (Phase 3)</summary>
+            <div class="workflow-grid">
+              <div>
+                <label>Queue</label>
+                <select id="followupQueue">
+                  <option value="pending_approvals">pending_approvals</option>
+                  <option value="pending_pickups">pending_pickups</option>
+                </select>
+              </div>
+              <div>
+                <label>Item Status (optional)</label>
+                <input id="followupStatus" placeholder="WaitingApproval" />
+              </div>
+            </div>
+            <button id="loadFollowupsBtn">Load Follow-ups</button>
+            <div id="followupResults"></div>
+
+            <label>Case ID (for note update)</label>
+            <input id="followupCaseId" />
+            <label>Follow-up Note</label>
+            <input id="followupNote" placeholder="Called customer" />
+            <button id="saveFollowupNoteBtn" class="ghost">Save Follow-up Note</button>
+            <p id="followupResult" class="hint"></p>
+
+            <label>Daily Close Note</label>
+            <input id="dailyCloseNote" placeholder="EOD close" />
+            <div class="row">
+              <button id="runDailyCloseBtn">Run Daily Close</button>
+              <button id="loadDailyCloseBtn" class="ghost">Load Latest Daily Close</button>
+            </div>
+            <pre id="dailyCloseResult"></pre>
+          </details>
+
+          <details class="card" id="module-archive" open>
+            <summary>Backup + Archive Admin (Phase 6)</summary>
+            <h3>Save DB Usage Snapshot</h3>
+            <div class="workflow-grid">
+              <div>
+                <label>Usage MB</label>
+                <input id="archiveUsageMb" value="475" />
+              </div>
+              <div>
+                <label>Quota MB</label>
+                <input id="archiveQuotaMb" value="500" />
+              </div>
+              <div>
+                <label>Threshold %</label>
+                <input id="archiveThresholdPct" value="90" />
+              </div>
+              <div>
+                <label>Source</label>
+                <input id="archiveUsageSource" value="ui-manual" />
+              </div>
+            </div>
+            <div class="row">
+              <button id="saveDbUsageBtn">Save DB Usage Snapshot</button>
+              <button id="loadDbUsageBtn" class="ghost">Load DB Usage</button>
+            </div>
+
+            <h3>Archive Trigger Check</h3>
+            <div class="workflow-grid">
+              <div>
+                <label>Force Trigger Check</label>
+                <select id="archiveTriggerForce">
+                  <option value="false" selected>false</option>
+                  <option value="true">true</option>
+                </select>
+              </div>
+              <div>
+                <label>Candidate Limit</label>
+                <input id="archiveTriggerLimit" value="10" />
+              </div>
+            </div>
+            <button id="runArchiveTriggerCheckBtn" class="accent">Run Archive Trigger Check</button>
+
+            <h3>Archive Index Lookup + Restore</h3>
+            <div class="workflow-grid">
+              <div>
+                <label>Case No (optional)</label>
+                <input id="archiveIndexCaseNo" placeholder="P6A-PROD-..." />
+              </div>
+              <div>
+                <label>Phone (optional)</label>
+                <input id="archiveIndexPhone" placeholder="98..." />
+              </div>
+              <div>
+                <label>Customer Name (optional)</label>
+                <input id="archiveIndexCustomerName" placeholder="name" />
+              </div>
+              <div>
+                <label>Restore Status (optional)</label>
+                <select id="archiveIndexRestoreStatus">
+                  <option value="" selected>all</option>
+                  <option value="ARCHIVED">ARCHIVED</option>
+                  <option value="RESTORED">RESTORED</option>
+                </select>
+              </div>
+            </div>
+            <button id="loadArchiveIndexBtn" class="ghost">Load Archive Index</button>
+
+            <label>Archive ID</label>
+            <input id="archiveRestoreId" placeholder="archive_id" />
+            <button id="restoreArchiveBtn" class="warn">Restore Archived Case</button>
+            <pre id="archiveAdminResult"></pre>
+          </details>
+
+          <details class="card phase4-card" id="module-billing" open>
+            <summary>Estimate + Billing Lock (Phase 4)</summary>
+            <p class="hint">Sequence: Create Estimate -> Decision -> Finalize -> Override (if needed) -> Credit Note.</p>
+
+            <div class="workflow-grid">
+              <div>
+                <label>Case ID</label>
+                <input id="estimateCaseId" placeholder="case_id" />
+              </div>
+              <div>
+                <label>Case Item ID</label>
+                <input id="estimateItemId" placeholder="case_item_id" />
+              </div>
+              <div>
+                <label>Estimate ID</label>
+                <input id="estimateId" placeholder="estimate_id" />
+              </div>
+              <div class="context-actions">
+                <button id="syncContextBtn" class="ghost">Sync Context from Status Panel</button>
+              </div>
+            </div>
+
+            <div class="phase4-chips">
+              <span class="chip"><strong>Invoice State</strong> <span id="invoiceStateChip">NA</span></span>
+              <span class="chip"><strong>Locked</strong> <span id="lockedChip">NA</span></span>
+              <span class="chip"><strong>Overrides</strong> <span id="overrideChip">0</span></span>
+              <span class="chip"><strong>Decision</strong> <span id="decisionChip">NA</span></span>
+            </div>
+
+            <h3>Estimate Input</h3>
+            <div class="workflow-grid">
+              <div><label>Labor (paise)</label><input id="laborPaise" value="12000" /></div>
+              <div><label>Spare (paise)</label><input id="sparePaise" value="8000" /></div>
+              <div><label>Other (paise)</label><input id="otherPaise" value="1000" /></div>
+              <div><label>Discount (paise)</label><input id="discountPaise" value="500" /></div>
+              <div>
+                <label>GST Required</label>
+                <select id="gstRequired"><option value="true" selected>true</option><option value="false">false</option></select>
+              </div>
+              <div>
+                <label>Send For Decision</label>
+                <select id="sendForDecision"><option value="true" selected>true</option><option value="false">false</option></select>
+              </div>
+            </div>
+            <div id="estimatePreview" class="preview-box"></div>
+            <button id="createEstimateBtn">Create Estimate</button>
+
+            <h3>Consent Decision</h3>
+            <div class="workflow-grid">
+              <div><label>Decision</label><select id="estimateDecision"><option>Approved</option><option>Rejected</option><option>Pending</option></select></div>
+              <div><label>Decision Channel</label><select id="decisionChannel"><option>call</option><option>in_person</option><option>whatsapp</option><option>sms</option></select></div>
+              <div><label>Decision By Name</label><input id="decisionByName" value="Ramesh" /></div>
+              <div><label>Decision By Phone</label><input id="decisionByPhone" value="9876500011" /></div>
+              <div><label>Consent Template Version</label><input id="consentTemplateVersion" value="estimate-v1" /></div>
+              <div><label>Consent Text Snapshot</label><input id="consentTextSnapshot" value="Approved on call" /></div>
+            </div>
+            <button id="setEstimateDecisionBtn" class="accent">Set Estimate Decision</button>
+
+            <h3>Finalize + Lock</h3>
+            <label>Finalize Reason</label>
+            <input id="finalizeReason" value="Finalize from UI" />
+            <label class="toggle-row"><input id="confirmFinalize" type="checkbox" /> I confirm this will lock financial values.</label>
+            <button id="finalizeEstimateBtn" class="warn">Finalize Estimate</button>
+
+            <h3>Override (After Finalize)</h3>
+            <div class="workflow-grid">
+              <div><label>Override Labor (paise)</label><input id="overrideLaborPaise" value="13000" /></div>
+              <div><label>Override Spare (paise)</label><input id="overrideSparePaise" value="8000" /></div>
+              <div><label>Override Other (paise)</label><input id="overrideOtherPaise" value="1000" /></div>
+              <div><label>Override Discount (paise)</label><input id="overrideDiscountPaise" value="500" /></div>
+            </div>
+            <label>Override Reason</label>
+            <input id="overrideReason" value="UI override after finalize" />
+            <label class="toggle-row"><input id="confirmOverride" type="checkbox" /> I confirm this creates an audited financial override.</label>
+            <button id="overrideEstimateBtn" class="warn">Override Finalized Estimate</button>
+
+            <h3>Credit Note</h3>
+            <div class="workflow-grid">
+              <div><label>Credit Note Amount (paise)</label><input id="creditAmountPaise" value="3000" /></div>
+              <div><label>Credit Note Reason</label><input id="creditReason" value="Minor billing correction" /></div>
+            </div>
+            <label class="toggle-row"><input id="confirmCreditNote" type="checkbox" /> I confirm this posts a non-destructive correction entry.</label>
+            <button id="createCreditNoteBtn" class="warn">Create Credit Note</button>
+
+            <div class="row">
+              <button id="getEstimateBtn" class="ghost">Get Estimate Snapshot</button>
+              <button id="listCaseEstimatesBtn" class="ghost">List Case Estimates</button>
+            </div>
+            <button id="loadLatestEstimateBtn" class="ghost">Use Latest Estimate From Case</button>
+            <pre id="phase4Highlights"></pre>
+            <pre id="phase4Result"></pre>
+          </details>
+        </section>
+
+        <section class="lane" id="lane-inventory">
+          <div class="lane-head">
+            <h2>Lane 2: Inventory Operations</h2>
+            <p class="hint">After case workflow is stable, run inventory create/list/consume with ledger verification.</p>
+          </div>
+
+          <details class="card" open>
+            <summary>Inventory + Case-linked Consumption (Phase 5)</summary>
+            <button id="runPhase5SmokePayloadBtn" class="ghost">Run Phase5 Smoke Payload Generator</button>
+            <pre id="phase5SmokePayloadResult"></pre>
+
+            <div class="workflow-grid">
+              <div><label>Case ID</label><input id="phase5CaseId" placeholder="case_id" /></div>
+              <div><label>Case Item ID</label><input id="phase5CaseItemId" placeholder="case_item_id" /></div>
+              <div><label>Inventory Item ID</label><input id="phase5InventoryItemId" placeholder="inventory_item_id" /></div>
+              <div class="context-actions"><button id="phase5SyncCaseBtn" class="ghost">Sync Case Context from Status Panel</button></div>
+            </div>
+            <p id="phase5StockWarning" class="hint stock-warning"></p>
+
+            <h3>Create Inventory Item</h3>
+            <div class="workflow-grid">
+              <div><label>SKU</label><input id="inventorySku" placeholder="FAN-CAP-2.5" /></div>
+              <div><label>Item Name</label><input id="inventoryName" placeholder="Fan Capacitor 2.5uF" /></div>
+              <div><label>UOM</label><input id="inventoryUom" value="pcs" /></div>
+              <div><label>Current Stock Qty</label><input id="inventoryStockQty" value="25" /></div>
+              <div><label>Reorder Level Qty</label><input id="inventoryReorderQty" value="5" /></div>
+              <div><label>Default Unit Cost (paise)</label><input id="inventoryUnitCostPaise" value="1500" /></div>
+              <div><label>Valuation Method</label><select id="inventoryValuation"><option>WEIGHTED_AVERAGE</option><option>FIFO</option></select></div>
+            </div>
+            <button id="createInventoryBtn">Create Inventory Item</button>
+            <p id="inventoryCreateResult" class="hint"></p>
+
+            <h3>List/Search Inventory</h3>
+            <div class="workflow-grid">
+              <div><label>Search (name or SKU)</label><input id="inventoryQuery" placeholder="capacitor" /></div>
+              <div><label>Low Stock Only</label><select id="inventoryLowStockOnly"><option value="false" selected>false</option><option value="true">true</option></select></div>
+            </div>
+            <button id="loadInventoryBtn" class="ghost">Load Inventory</button>
+            <div id="inventoryList"></div>
+
+            <h3>Consume on Case</h3>
+            <div class="workflow-grid">
+              <div><label>Qty</label><input id="consumeQty" value="1" /></div>
+              <div><label>UOM (optional)</label><input id="consumeUom" placeholder="pcs" /></div>
+              <div><label>Unit Cost Snapshot (paise optional)</label><input id="consumeUnitCostPaise" placeholder="1500" /></div>
+              <div><label>Line Cost (paise optional)</label><input id="consumeLineCostPaise" placeholder="1500" /></div>
+            </div>
+            <label>Notes</label>
+            <input id="consumeNotes" placeholder="Used during repair" />
+            <button id="consumeOnCaseBtn" class="accent">Consume on Case</button>
+            <div class="row">
+              <button id="loadCaseConsumptionBtn" class="ghost">Load Case Consumption</button>
+              <button id="verifyLedgerBtn" class="ghost">Quick Ledger Verify</button>
+            </div>
+
+            <h3>Correction/Reversal Helper</h3>
+            <div class="workflow-grid">
+              <div><label>Original Consumption ID</label><input id="correctionConsumptionId" placeholder="consumption_id" /></div>
+              <div><label>Correction Qty</label><input id="correctionQty" value="1" /></div>
+              <div><label>Correction Type</label><select id="correctionType"><option value="FULL_REVERSAL">FULL_REVERSAL</option><option value="PARTIAL_REVERSAL">PARTIAL_REVERSAL</option><option value="COST_CORRECTION">COST_CORRECTION</option></select></div>
+              <div><label>Correction Reason</label><input id="correctionReason" placeholder="wrong qty entered" /></div>
+            </div>
+            <div class="row">
+              <button id="prepareCorrectionNoteBtn" class="warn">Prepare Correction Note</button>
+              <button id="verifyCorrectionRefBtn" class="ghost">Verify Original Ledger Ref</button>
+            </div>
+            <pre id="phase5CorrectionResult"></pre>
+            <pre id="phase5Result"></pre>
+            <pre id="phase5LedgerResult"></pre>
+          </details>
+
+          <details class="card" open>
+            <summary>Expenses + Recurring Bills (Phase 6)</summary>
+            <h3>Expenses</h3>
+            <div class="workflow-grid">
+              <div><label>Expense Date (YYYY-MM-DD)</label><input id="expenseDateLocal" placeholder="2026-03-08" /></div>
+              <div><label>Category</label><input id="expenseCategory" value="tea" /></div>
+              <div><label>Amount (paise)</label><input id="expenseAmountPaise" value="15000" /></div>
+              <div><label>Payment Mode</label><input id="expensePaymentMode" value="cash" /></div>
+            </div>
+            <label>Expense Note</label>
+            <input id="expenseNote" placeholder="shop tea and snacks" />
+            <div class="row"><button id="createExpenseBtn">Create Expense</button><button id="loadExpensesBtn" class="ghost">Load Expenses</button></div>
+
+            <h3>Recurring Bills</h3>
+            <div class="workflow-grid">
+              <div><label>Bill Name</label><input id="billName" value="Electricity" /></div>
+              <div><label>Bill Category</label><input id="billCategory" value="utilities" /></div>
+              <div><label>Bill Amount (paise)</label><input id="billAmountPaise" value="350000" /></div>
+              <div><label>Due Date (YYYY-MM-DD)</label><input id="billDueDate" placeholder="2026-03-15" /></div>
+              <div><label>Frequency (days)</label><input id="billFrequencyDays" value="30" /></div>
+              <div><label>Reminder Offsets (comma)</label><input id="billReminderOffsets" value="7,3,0" /></div>
+            </div>
+            <div class="row"><button id="createBillBtn" class="accent">Create Recurring Bill</button><button id="loadBillsBtn" class="ghost">Load Recurring Bills</button></div>
+
+            <h3>Bill Payment Log</h3>
+            <div class="workflow-grid">
+              <div><label>Recurring Bill ID</label><input id="billId" placeholder="bill_id" /></div>
+              <div><label>Paid Amount (paise, optional)</label><input id="billPayAmountPaise" placeholder="blank uses bill amount" /></div>
+              <div><label>Payment Mode</label><input id="billPayMode" value="bank_transfer" /></div>
+              <div><label>Payment Note</label><input id="billPayNote" placeholder="paid on net banking" /></div>
+            </div>
+            <button id="payBillBtn" class="warn">Log Bill Payment + Roll Due Date</button>
+            <pre id="phase6Result"></pre>
+          </details>
+        </section>
+
+        <section class="lane" id="lane-analytics">
+          <div class="lane-head">
+            <h2>Lane 3: Analytics</h2>
+            <p class="hint">Role-aware analytics and trend slices, loaded only when needed.</p>
+          </div>
+          <details class="card" open>
+            <summary>Analytics Overview (Phase 8)</summary>
+            <div class="workflow-grid">
+              <div><label>Window Days</label><input id="analyticsDays" value="30" /></div>
+              <div><label>Query Timeout (ms)</label><input id="analyticsTimeoutMs" value="9000" /></div>
+            </div>
+            <div class="row">
+              <button id="loadAnalyticsBtn" class="accent">Load Analytics Overview</button>
+              <button id="clearAnalyticsBtn" class="ghost">Clear Analytics View</button>
+            </div>
+
+            <div class="phase8-role-band">
+              <span class="chip"><strong>User Role</strong> <span id="analyticsRoleChip">NA</span></span>
+              <span class="chip"><strong>Finance Visibility</strong> <span id="analyticsFinanceChip">NA</span></span>
+            </div>
+
+            <h3>Case + Follow-up KPIs</h3>
+            <div id="analyticsCaseKpi" class="analytics-grid"></div>
+            <h3>Inventory Trend</h3>
+            <div id="analyticsInventoryKpi" class="analytics-grid"></div>
+            <h3>Inventory Daily Slices</h3>
+            <div id="analyticsInventorySlices" class="analytics-grid"></div>
+            <h3>Expense Trend</h3>
+            <div id="analyticsExpenseKpi" class="analytics-grid"></div>
+            <h3>Finance (Role-filtered)</h3>
+            <div id="analyticsFinanceKpi" class="analytics-grid"></div>
+            <h3>Finance + Category Trends</h3>
+            <div id="analyticsFinanceTrend" class="analytics-grid"></div>
+            <pre id="phase8Result"></pre>
+          </details>
+        </section>
+
+        <section class="lane" id="lane-hr">
+          <div class="lane-head">
+            <h2>Lane 4: HR (Admin Only)</h2>
+            <p class="hint">Attendance and advances are intentionally separated as lowest-priority daily workflow.</p>
+          </div>
+          <details class="card" open>
+            <summary>HR Operations (Phase 9)</summary>
+            <h3>Attendance Upsert</h3>
+            <div class="workflow-grid">
+              <div><label>Employee Code</label><input id="hrEmployeeCode" placeholder="EMP-001" /></div>
+              <div><label>Employee Name</label><input id="hrEmployeeName" placeholder="Ravi Kumar" /></div>
+              <div><label>Attendance Date (YYYY-MM-DD)</label><input id="hrAttendanceDate" placeholder="2026-03-10" /></div>
+              <div><label>Attendance Status</label><select id="hrAttendanceStatus"><option>Present</option><option>HalfDay</option><option>Leave</option></select></div>
+              <div><label>Hours Worked (optional)</label><input id="hrAttendanceHours" placeholder="8" /></div>
+            </div>
+            <label>Attendance Notes</label>
+            <input id="hrAttendanceNotes" placeholder="on-time shift" />
+            <div class="row"><button id="saveAttendanceBtn">Save Attendance</button><button id="loadAttendanceBtn" class="ghost">Load Attendance</button></div>
+
+            <h3>Employee Advance Entry</h3>
+            <div class="workflow-grid">
+              <div><label>Advance Date (YYYY-MM-DD)</label><input id="hrAdvanceDate" placeholder="2026-03-10" /></div>
+              <div><label>Advance Amount (paise)</label><input id="hrAdvanceAmountPaise" value="500000" /></div>
+              <div><label>Settled Amount (paise optional)</label><input id="hrAdvanceSettledPaise" value="0" /></div>
+              <div><label>Repayment Due Date (optional)</label><input id="hrAdvanceRepaymentDate" placeholder="2026-04-10" /></div>
+              <div><label>Advance Status</label><select id="hrAdvanceStatus"><option>OPEN</option><option>PARTIAL</option><option>SETTLED</option><option>WAIVED</option></select></div>
+            </div>
+            <label>Advance Reason</label>
+            <input id="hrAdvanceReason" placeholder="family emergency" />
+            <label>Advance Notes</label>
+            <input id="hrAdvanceNotes" placeholder="to be adjusted in payroll" />
+            <div class="row"><button id="createAdvanceBtn" class="accent">Create Advance</button><button id="loadAdvancesBtn" class="ghost">Load Advances</button></div>
+
+            <h3>HR Summary</h3>
+            <div class="workflow-grid"><div><label>Summary Window Days</label><input id="hrSummaryDays" value="30" /></div></div>
+            <button id="loadHrSummaryBtn" class="ghost">Load HR Summary</button>
+            <pre id="phase9Result"></pre>
+          </details>
+        </section>
       </div>
-      <p id="phase5StockWarning" class="hint stock-warning"></p>
-
-      <h3>1) Create Inventory Item</h3>
-      <div class="workflow-grid">
-        <div>
-          <label>SKU</label>
-          <input id="inventorySku" placeholder="FAN-CAP-2.5" />
-        </div>
-        <div>
-          <label>Item Name</label>
-          <input id="inventoryName" placeholder="Fan Capacitor 2.5uF" />
-        </div>
-        <div>
-          <label>UOM</label>
-          <input id="inventoryUom" value="pcs" />
-        </div>
-        <div>
-          <label>Current Stock Qty</label>
-          <input id="inventoryStockQty" value="25" />
-        </div>
-        <div>
-          <label>Reorder Level Qty</label>
-          <input id="inventoryReorderQty" value="5" />
-        </div>
-        <div>
-          <label>Default Unit Cost (paise)</label>
-          <input id="inventoryUnitCostPaise" value="1500" />
-        </div>
-        <div>
-          <label>Valuation Method</label>
-          <select id="inventoryValuation">
-            <option>WEIGHTED_AVERAGE</option>
-            <option>FIFO</option>
-          </select>
-        </div>
-      </div>
-      <button id="createInventoryBtn">Create Inventory Item</button>
-      <p id="inventoryCreateResult" class="hint"></p>
-
-      <h3>2) List/Search Inventory</h3>
-      <div class="workflow-grid">
-        <div>
-          <label>Search (name or SKU)</label>
-          <input id="inventoryQuery" placeholder="capacitor" />
-        </div>
-        <div>
-          <label>Low Stock Only</label>
-          <select id="inventoryLowStockOnly">
-            <option value="false" selected>false</option>
-            <option value="true">true</option>
-          </select>
-        </div>
-      </div>
-      <button id="loadInventoryBtn" class="ghost">Load Inventory</button>
-      <div id="inventoryList"></div>
-
-      <h3>3) Consume on Case</h3>
-      <div class="workflow-grid">
-        <div>
-          <label>Qty</label>
-          <input id="consumeQty" value="1" />
-        </div>
-        <div>
-          <label>UOM (optional)</label>
-          <input id="consumeUom" placeholder="pcs" />
-        </div>
-        <div>
-          <label>Unit Cost Snapshot (paise optional)</label>
-          <input id="consumeUnitCostPaise" placeholder="1500" />
-        </div>
-        <div>
-          <label>Line Cost (paise optional)</label>
-          <input id="consumeLineCostPaise" placeholder="1500" />
-        </div>
-      </div>
-      <label>Notes</label>
-      <input id="consumeNotes" placeholder="Used during repair" />
-      <button id="consumeOnCaseBtn" class="accent">Consume on Case</button>
-
-      <div class="row">
-        <button id="loadCaseConsumptionBtn" class="ghost">Load Case Consumption</button>
-        <button id="verifyLedgerBtn" class="ghost">Quick Ledger Verify</button>
-      </div>
-
-      <h3>4) Correction/Reversal Operator Path</h3>
-      <p class="hint">Current API has immutable consumption rows. Use this helper to produce a standard correction note linked to original `consumption_id`, then apply approved reversal/correction via controlled backend/admin path.</p>
-      <div class="workflow-grid">
-        <div>
-          <label>Original Consumption ID</label>
-          <input id="correctionConsumptionId" placeholder="consumption_id" />
-        </div>
-        <div>
-          <label>Correction Qty</label>
-          <input id="correctionQty" value="1" />
-        </div>
-        <div>
-          <label>Correction Type</label>
-          <select id="correctionType">
-            <option value="FULL_REVERSAL">FULL_REVERSAL</option>
-            <option value="PARTIAL_REVERSAL">PARTIAL_REVERSAL</option>
-            <option value="COST_CORRECTION">COST_CORRECTION</option>
-          </select>
-        </div>
-        <div>
-          <label>Correction Reason</label>
-          <input id="correctionReason" placeholder="wrong qty entered" />
-        </div>
-      </div>
-      <div class="row">
-        <button id="prepareCorrectionNoteBtn" class="warn">Prepare Correction Note</button>
-        <button id="verifyCorrectionRefBtn" class="ghost">Verify Original Ledger Ref</button>
-      </div>
-      <pre id="phase5CorrectionResult"></pre>
-
-      <pre id="phase5Result"></pre>
-      <pre id="phase5LedgerResult"></pre>
-    </section>
-
-    <section class="card">
-      <h2>Phase 6 Expenses + Recurring Bills</h2>
-      <p class="hint">Minimal operational vertical slice: create/list expenses, create/list recurring bills, and log bill payments with next-due auto-roll.</p>
-
-      <h3>1) Expenses</h3>
-      <div class="workflow-grid">
-        <div>
-          <label>Expense Date (YYYY-MM-DD)</label>
-          <input id="expenseDateLocal" placeholder="2026-03-08" />
-        </div>
-        <div>
-          <label>Category</label>
-          <input id="expenseCategory" value="tea" />
-        </div>
-        <div>
-          <label>Amount (paise)</label>
-          <input id="expenseAmountPaise" value="15000" />
-        </div>
-        <div>
-          <label>Payment Mode</label>
-          <input id="expensePaymentMode" value="cash" />
-        </div>
-      </div>
-      <label>Expense Note</label>
-      <input id="expenseNote" placeholder="shop tea and snacks" />
-      <div class="row">
-        <button id="createExpenseBtn">Create Expense</button>
-        <button id="loadExpensesBtn" class="ghost">Load Expenses</button>
-      </div>
-
-      <h3>2) Recurring Bills</h3>
-      <div class="workflow-grid">
-        <div>
-          <label>Bill Name</label>
-          <input id="billName" value="Electricity" />
-        </div>
-        <div>
-          <label>Bill Category</label>
-          <input id="billCategory" value="utilities" />
-        </div>
-        <div>
-          <label>Bill Amount (paise)</label>
-          <input id="billAmountPaise" value="350000" />
-        </div>
-        <div>
-          <label>Due Date (YYYY-MM-DD)</label>
-          <input id="billDueDate" placeholder="2026-03-15" />
-        </div>
-        <div>
-          <label>Frequency (days)</label>
-          <input id="billFrequencyDays" value="30" />
-        </div>
-        <div>
-          <label>Reminder Offsets (comma)</label>
-          <input id="billReminderOffsets" value="7,3,0" />
-        </div>
-      </div>
-
-      <div class="row">
-        <button id="createBillBtn" class="accent">Create Recurring Bill</button>
-        <button id="loadBillsBtn" class="ghost">Load Recurring Bills</button>
-      </div>
-
-      <h3>3) Bill Payment Log</h3>
-      <div class="workflow-grid">
-        <div>
-          <label>Recurring Bill ID</label>
-          <input id="billId" placeholder="bill_id" />
-        </div>
-        <div>
-          <label>Paid Amount (paise, optional)</label>
-          <input id="billPayAmountPaise" placeholder="blank uses bill amount" />
-        </div>
-        <div>
-          <label>Payment Mode</label>
-          <input id="billPayMode" value="bank_transfer" />
-        </div>
-        <div>
-          <label>Payment Note</label>
-          <input id="billPayNote" placeholder="paid on net banking" />
-        </div>
-      </div>
-      <button id="payBillBtn" class="warn">Log Bill Payment + Roll Due Date</button>
-
-      <pre id="phase6Result"></pre>
-    </section>
-
-    <section class="card">
-      <h2>Phase 6 Archive Admin Operations</h2>
-      <p class="hint">Operator-first controls for DB usage monitor, trigger readiness, archive index lookup, and restore by archive ID.</p>
-
-      <h3>1) Save DB Usage Snapshot</h3>
-      <div class="workflow-grid">
-        <div>
-          <label>Usage MB</label>
-          <input id="archiveUsageMb" value="475" />
-        </div>
-        <div>
-          <label>Quota MB</label>
-          <input id="archiveQuotaMb" value="500" />
-        </div>
-        <div>
-          <label>Threshold %</label>
-          <input id="archiveThresholdPct" value="90" />
-        </div>
-        <div>
-          <label>Source</label>
-          <input id="archiveUsageSource" value="ui-manual" />
-        </div>
-      </div>
-      <button id="saveDbUsageBtn">Save DB Usage Snapshot</button>
-
-      <h3>2) Load Latest DB Usage</h3>
-      <button id="loadDbUsageBtn" class="ghost">Load DB Usage</button>
-
-      <h3>3) Archive Trigger Check</h3>
-      <div class="workflow-grid">
-        <div>
-          <label>Force Trigger Check</label>
-          <select id="archiveTriggerForce">
-            <option value="false" selected>false</option>
-            <option value="true">true</option>
-          </select>
-        </div>
-        <div>
-          <label>Candidate Limit</label>
-          <input id="archiveTriggerLimit" value="10" />
-        </div>
-      </div>
-      <button id="runArchiveTriggerCheckBtn" class="accent">Run Archive Trigger Check</button>
-
-      <h3>4) Archive Index Lookup</h3>
-      <div class="workflow-grid">
-        <div>
-          <label>Case No (optional)</label>
-          <input id="archiveIndexCaseNo" placeholder="P6A-PROD-..." />
-        </div>
-        <div>
-          <label>Phone (optional)</label>
-          <input id="archiveIndexPhone" placeholder="98..." />
-        </div>
-        <div>
-          <label>Customer Name (optional)</label>
-          <input id="archiveIndexCustomerName" placeholder="name" />
-        </div>
-        <div>
-          <label>Restore Status (optional)</label>
-          <select id="archiveIndexRestoreStatus">
-            <option value="" selected>all</option>
-            <option value="ARCHIVED">ARCHIVED</option>
-            <option value="RESTORED">RESTORED</option>
-          </select>
-        </div>
-      </div>
-      <button id="loadArchiveIndexBtn" class="ghost">Load Archive Index</button>
-
-      <h3>5) Restore Archived Case</h3>
-      <label>Archive ID</label>
-      <input id="archiveRestoreId" placeholder="archive_id" />
-      <button id="restoreArchiveBtn" class="warn">Restore Archived Case</button>
-
-      <pre id="archiveAdminResult"></pre>
-    </section>
-
-    <section class="card">
-      <h2>Phase 8 Analytics Overview</h2>
-      <p class="hint">Role-aware analytics: Admin gets full financial rollup, IT gets restricted finance visibility, Staff sees operations-only dashboard.</p>
-
-      <div class="workflow-grid">
-        <div>
-          <label>Window Days</label>
-          <input id="analyticsDays" value="30" />
-        </div>
-        <div>
-          <label>Query Timeout (ms)</label>
-          <input id="analyticsTimeoutMs" value="9000" />
-        </div>
-      </div>
-      <div class="row">
-        <button id="loadAnalyticsBtn" class="accent">Load Analytics Overview</button>
-        <button id="clearAnalyticsBtn" class="ghost">Clear Analytics View</button>
-      </div>
-
-      <div class="phase8-role-band">
-        <span class="chip"><strong>User Role</strong> <span id="analyticsRoleChip">NA</span></span>
-        <span class="chip"><strong>Finance Visibility</strong> <span id="analyticsFinanceChip">NA</span></span>
-      </div>
-
-      <h3>Case + Follow-up KPIs</h3>
-      <div id="analyticsCaseKpi" class="analytics-grid"></div>
-
-      <h3>Inventory Trend</h3>
-      <div id="analyticsInventoryKpi" class="analytics-grid"></div>
-
-      <h3>Inventory Daily Slices</h3>
-      <div id="analyticsInventorySlices" class="analytics-grid"></div>
-
-      <h3>Expense Trend</h3>
-      <div id="analyticsExpenseKpi" class="analytics-grid"></div>
-
-      <h3>Finance (Role-filtered)</h3>
-      <div id="analyticsFinanceKpi" class="analytics-grid"></div>
-
-      <h3>Finance + Category Trends (Role-filtered)</h3>
-      <div id="analyticsFinanceTrend" class="analytics-grid"></div>
-
-      <pre id="phase8Result"></pre>
-    </section>
-
-    <details class="card" open>
-      <summary><h2>Case Operations (Phase 2)</h2></summary>
-      <label>Case No</label>
-      <input id="caseNo" placeholder="AJ-101" />
-      <label>Customer Name</label>
-      <input id="customerName" placeholder="Ramesh" />
-      <label>Customer Phone</label>
-      <input id="customerPhone" placeholder="9876500011" />
-      <label>Item Category</label>
-      <input id="itemCategory" value="fan" />
-      <label>Reported Issue</label>
-      <input id="reportedIssue" placeholder="Not rotating" />
-      <button id="createCaseBtn">Create Case</button>
-      <p id="createResult" class="hint"></p>
-
-      <label>By Case No</label>
-      <input id="searchCaseNo" placeholder="AJ-101" />
-      <label>By Phone</label>
-      <input id="searchPhone" placeholder="9876500011" />
-      <button id="searchBtn">Search</button>
-      <div id="searchResults"></div>
-
-      <label>Case ID</label>
-      <input id="statusCaseId" />
-      <label>Case Item ID</label>
-      <input id="statusItemId" />
-      <label>To Status</label>
-      <select id="toStatus">
-        <option>Diagnosis</option>
-        <option>WaitingApproval</option>
-        <option>ApprovedForRepair</option>
-        <option>RejectedByCustomer</option>
-        <option>InRepair</option>
-        <option>Ready</option>
-        <option>Delivered</option>
-        <option>Cancelled</option>
-      </select>
-      <label>Note</label>
-      <input id="statusNote" placeholder="optional note" />
-      <button id="updateStatusBtn">Update Status</button>
-      <p id="statusResult" class="hint"></p>
-      <button id="historyBtn" class="ghost">Load Status History</button>
-      <pre id="history"></pre>
-    </details>
-
-    <details class="card" open>
-      <summary><h2>Follow-up + Daily Close (Phase 3)</h2></summary>
-      <label>Queue</label>
-      <select id="followupQueue">
-        <option value="pending_approvals">pending_approvals</option>
-        <option value="pending_pickups">pending_pickups</option>
-      </select>
-      <label>Item Status (optional)</label>
-      <input id="followupStatus" placeholder="WaitingApproval" />
-      <button id="loadFollowupsBtn">Load Follow-ups</button>
-      <div id="followupResults"></div>
-
-      <label>Case ID (for note update)</label>
-      <input id="followupCaseId" />
-      <label>Follow-up Note</label>
-      <input id="followupNote" placeholder="Called customer" />
-      <button id="saveFollowupNoteBtn">Save Follow-up Note</button>
-      <p id="followupResult" class="hint"></p>
-
-      <label>Daily Close Note</label>
-      <input id="dailyCloseNote" placeholder="EOD close" />
-      <button id="runDailyCloseBtn">Run Daily Close</button>
-      <button id="loadDailyCloseBtn" class="ghost">Load Latest Daily Close</button>
-      <pre id="dailyCloseResult"></pre>
-    </details>
+    </div>
+    </div>
   </main>
 
   <script type="module" src="./app.js"></script>

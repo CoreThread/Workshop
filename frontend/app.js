@@ -1,6 +1,6 @@
 const storage = {
   get apiBase() {
-    return localStorage.getItem("apiBase") || "http://127.0.0.1:8788";
+    return localStorage.getItem("apiBase") || "https://workshop-api.jaiswal-utkarshuj.workers.dev";
   },
   set apiBase(value) {
     localStorage.setItem("apiBase", value);
@@ -21,7 +21,28 @@ const el = {
   password: document.getElementById("password"),
   loginBtn: document.getElementById("loginBtn"),
   logoutBtn: document.getElementById("logoutBtn"),
+  logoutTopBtn: document.getElementById("logoutTopBtn"),
   whoami: document.getElementById("whoami"),
+  whoamiTop: document.getElementById("whoamiTop"),
+  setup: document.getElementById("setup"),
+  appWorkspace: document.getElementById("appWorkspace"),
+  sessionDock: document.getElementById("sessionDock"),
+  loginGateHint: document.getElementById("loginGateHint"),
+  lanePrimary: document.getElementById("lane-primary"),
+  laneInventory: document.getElementById("lane-inventory"),
+  laneAnalytics: document.getElementById("lane-analytics"),
+  laneHr: document.getElementById("lane-hr"),
+  moduleBilling: document.getElementById("module-billing"),
+  moduleArchive: document.getElementById("module-archive"),
+  quickCreateCaseBtn: document.getElementById("quickCreateCaseBtn"),
+  quickLoadFollowupsBtn: document.getElementById("quickLoadFollowupsBtn"),
+  quickRunDailyCloseBtn: document.getElementById("quickRunDailyCloseBtn"),
+  quickLoadArchiveIndexBtn: document.getElementById("quickLoadArchiveIndexBtn"),
+  quickActionsHint: document.getElementById("quickActionsHint"),
+  tabLanePrimary: document.getElementById("tabLanePrimary"),
+  tabLaneInventory: document.getElementById("tabLaneInventory"),
+  tabLaneAnalytics: document.getElementById("tabLaneAnalytics"),
+  tabLaneHr: document.getElementById("tabLaneHr"),
   caseNo: document.getElementById("caseNo"),
   customerName: document.getElementById("customerName"),
   customerPhone: document.getElementById("customerPhone"),
@@ -182,7 +203,27 @@ const el = {
   analyticsExpenseKpi: document.getElementById("analyticsExpenseKpi"),
   analyticsFinanceKpi: document.getElementById("analyticsFinanceKpi"),
   analyticsFinanceTrend: document.getElementById("analyticsFinanceTrend"),
-  phase8Result: document.getElementById("phase8Result")
+  phase8Result: document.getElementById("phase8Result"),
+  hrEmployeeCode: document.getElementById("hrEmployeeCode"),
+  hrEmployeeName: document.getElementById("hrEmployeeName"),
+  hrAttendanceDate: document.getElementById("hrAttendanceDate"),
+  hrAttendanceStatus: document.getElementById("hrAttendanceStatus"),
+  hrAttendanceHours: document.getElementById("hrAttendanceHours"),
+  hrAttendanceNotes: document.getElementById("hrAttendanceNotes"),
+  saveAttendanceBtn: document.getElementById("saveAttendanceBtn"),
+  loadAttendanceBtn: document.getElementById("loadAttendanceBtn"),
+  hrAdvanceDate: document.getElementById("hrAdvanceDate"),
+  hrAdvanceAmountPaise: document.getElementById("hrAdvanceAmountPaise"),
+  hrAdvanceSettledPaise: document.getElementById("hrAdvanceSettledPaise"),
+  hrAdvanceRepaymentDate: document.getElementById("hrAdvanceRepaymentDate"),
+  hrAdvanceStatus: document.getElementById("hrAdvanceStatus"),
+  hrAdvanceReason: document.getElementById("hrAdvanceReason"),
+  hrAdvanceNotes: document.getElementById("hrAdvanceNotes"),
+  createAdvanceBtn: document.getElementById("createAdvanceBtn"),
+  loadAdvancesBtn: document.getElementById("loadAdvancesBtn"),
+  hrSummaryDays: document.getElementById("hrSummaryDays"),
+  loadHrSummaryBtn: document.getElementById("loadHrSummaryBtn"),
+  phase9Result: document.getElementById("phase9Result")
 };
 
 el.apiBase.value = storage.apiBase;
@@ -193,11 +234,248 @@ const phase5State = {
 };
 
 const appState = {
-  currentRole: ""
+  currentRole: "",
+  compactMobileApplied: false,
+  activeLane: "lane-primary"
 };
+
+const MOBILE_BREAKPOINT = 820;
 
 function setText(node, text) {
   node.textContent = text;
+}
+
+function normalizeBase(value) {
+  return String(value || "").trim().replace(/\/$/, "");
+}
+
+function isLocalBase(base) {
+  return /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(base);
+}
+
+function buildFetchErrorMessage(base, originalMessage) {
+  const pageIsHttps = window.location.protocol === "https:";
+  const baseIsHttp = /^http:\/\//i.test(base);
+
+  if (pageIsHttps && (baseIsHttp || isLocalBase(base))) {
+    return "Cannot reach local/non-HTTPS API from deployed HTTPS site. Use API Base: https://workshop-api.jaiswal-utkarshuj.workers.dev";
+  }
+
+  if (isLocalBase(base) && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
+    return "Cannot reach localhost API from this browser context. Use API Base: https://workshop-api.jaiswal-utkarshuj.workers.dev";
+  }
+
+  return originalMessage || "Network request failed";
+}
+
+function setHidden(node, shouldHide) {
+  if (!node) return;
+  node.classList.toggle("is-hidden", shouldHide);
+}
+
+function applyLoginGate() {
+  const loggedIn = Boolean(storage.token && appState.currentRole);
+  setHidden(el.setup, loggedIn);
+  setHidden(el.appWorkspace, !loggedIn);
+  setHidden(el.sessionDock, !loggedIn);
+
+  if (!el.loginGateHint) return;
+  if (loggedIn) {
+    setText(el.loginGateHint, "Workspace unlocked. Use lane tabs to navigate.");
+  } else {
+    setText(el.loginGateHint, "Login required to open operational lanes.");
+  }
+}
+
+function setDisabled(node, shouldDisable, reason = "") {
+  if (!node) return;
+  node.disabled = shouldDisable;
+  node.classList.toggle("is-disabled", shouldDisable);
+  if (reason) node.title = reason;
+  else node.removeAttribute("title");
+}
+
+function wireButtonClickEffects() {
+  document.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+
+    const button = target.closest("button");
+    if (!(button instanceof HTMLButtonElement)) return;
+    if (button.disabled) return;
+
+    const rect = button.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    button.style.setProperty("--ripple-x", `${x}px`);
+    button.style.setProperty("--ripple-y", `${y}px`);
+
+    button.classList.remove("click-ripple");
+    void button.offsetWidth;
+    button.classList.add("click-ripple");
+  });
+}
+
+function laneTabs() {
+  return [
+    el.tabLanePrimary,
+    el.tabLaneInventory,
+    el.tabLaneAnalytics,
+    el.tabLaneHr
+  ].filter(Boolean);
+}
+
+function laneNodes() {
+  return [
+    el.lanePrimary,
+    el.laneInventory,
+    el.laneAnalytics,
+    el.laneHr
+  ].filter(Boolean);
+}
+
+function isLaneAllowed(node) {
+  if (!node) return false;
+  return !node.classList.contains("is-hidden");
+}
+
+function getAllowedLaneIds() {
+  return laneNodes().filter(isLaneAllowed).map((node) => node.id);
+}
+
+function activateLane(laneId, options = {}) {
+  const { scroll = false } = options;
+  const allowed = getAllowedLaneIds();
+  const nextLaneId = allowed.includes(laneId) ? laneId : allowed[0] || "lane-primary";
+
+  laneNodes().forEach((lane) => {
+    lane.classList.toggle("lane-active", lane.id === nextLaneId);
+  });
+
+  laneTabs().forEach((tab) => {
+    const active = tab.dataset.laneTarget === nextLaneId;
+    tab.classList.toggle("is-active", active);
+    tab.classList.toggle("ghost", !active);
+    tab.setAttribute("aria-selected", active ? "true" : "false");
+  });
+
+  appState.activeLane = nextLaneId;
+  if (scroll) {
+    document.getElementById(nextLaneId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
+
+function syncLaneWithRoleVisibility() {
+  activateLane(appState.activeLane, { scroll: false });
+}
+
+function wireLaneNavigation() {
+  laneTabs().forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const laneId = tab.dataset.laneTarget;
+      if (!laneId) return;
+      activateLane(laneId, { scroll: true });
+    });
+  });
+
+  document.querySelectorAll(".jump-link[data-lane-target]").forEach((link) => {
+    link.addEventListener("click", (event) => {
+      const targetLane = link.getAttribute("data-lane-target");
+      const href = link.getAttribute("href") || "";
+      if (!targetLane) return;
+
+      event.preventDefault();
+      activateLane(targetLane, { scroll: false });
+
+      if (href.startsWith("#")) {
+        const anchor = document.querySelector(href);
+        anchor?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    });
+  });
+}
+
+function applyRoleView() {
+  const role = (appState.currentRole || "").toUpperCase();
+
+  if (!role) {
+    setHidden(el.laneHr, false);
+    setHidden(el.laneAnalytics, false);
+    setHidden(el.moduleBilling, false);
+    setHidden(el.moduleArchive, false);
+    setDisabled(el.quickLoadArchiveIndexBtn, false);
+    if (el.quickActionsHint) {
+      setText(el.quickActionsHint, "Login to enforce role-aware workspace visibility.");
+    }
+    applyLoginGate();
+    syncLaneWithRoleVisibility();
+    return;
+  }
+
+  if (role === "ADMIN") {
+    setHidden(el.laneHr, false);
+    setHidden(el.laneAnalytics, false);
+    setHidden(el.moduleBilling, false);
+    setHidden(el.moduleArchive, false);
+    setDisabled(el.quickLoadArchiveIndexBtn, false);
+    if (el.quickActionsHint) setText(el.quickActionsHint, "Admin mode: all lanes available.");
+    applyLoginGate();
+    syncLaneWithRoleVisibility();
+    return;
+  }
+
+  if (role === "IT") {
+    setHidden(el.laneHr, true);
+    setHidden(el.laneAnalytics, false);
+    setHidden(el.moduleBilling, false);
+    setHidden(el.moduleArchive, false);
+    setDisabled(el.quickLoadArchiveIndexBtn, false);
+    if (el.quickActionsHint) setText(el.quickActionsHint, "IT mode: HR lane hidden.");
+    applyLoginGate();
+    syncLaneWithRoleVisibility();
+    return;
+  }
+
+  if (role === "STAFF") {
+    setHidden(el.laneHr, true);
+    setHidden(el.laneAnalytics, true);
+    setHidden(el.moduleBilling, true);
+    setHidden(el.moduleArchive, true);
+    setDisabled(el.quickLoadArchiveIndexBtn, true, "Archive index is available for Admin/IT only.");
+    if (el.quickActionsHint) {
+      setText(el.quickActionsHint, "Staff mode: finance/archive/analytics/hr sections are hidden.");
+    }
+    applyLoginGate();
+    syncLaneWithRoleVisibility();
+    return;
+  }
+
+  if (el.quickActionsHint) {
+    setText(el.quickActionsHint, `Role ${role}: default visibility applied.`);
+  }
+  applyLoginGate();
+  syncLaneWithRoleVisibility();
+}
+
+function setCompactMobileMode() {
+  const isMobile = window.innerWidth <= MOBILE_BREAKPOINT;
+  document.body.classList.toggle("compact-mobile", isMobile);
+
+  if (isMobile && !appState.compactMobileApplied) {
+    const autoCollapse = [el.laneInventory, el.laneAnalytics, el.laneHr]
+      .filter(Boolean)
+      .flatMap((lane) => Array.from(lane.querySelectorAll("details")));
+
+    autoCollapse.forEach((node) => {
+      node.removeAttribute("open");
+    });
+    appState.compactMobileApplied = true;
+    return;
+  }
+
+  if (!isMobile) {
+    appState.compactMobileApplied = false;
+  }
 }
 
 function toBool(value) {
@@ -365,6 +643,11 @@ function setArchiveAdminResult(payload) {
 function setPhase8Result(payload) {
   if (!el.phase8Result) return;
   el.phase8Result.textContent = JSON.stringify(payload, null, 2);
+}
+
+function setPhase9Result(payload) {
+  if (!el.phase9Result) return;
+  el.phase9Result.textContent = JSON.stringify(payload, null, 2);
 }
 
 function metricCard(label, value) {
@@ -557,17 +840,23 @@ function renderInventoryList(items = []) {
 }
 
 async function api(path, options = {}) {
-  const base = storage.apiBase.replace(/\/$/, "");
+  const base = normalizeBase(storage.apiBase);
   const headers = {
     "Content-Type": "application/json",
     ...(options.headers || {})
   };
   if (storage.token) headers.Authorization = `Bearer ${storage.token}`;
 
-  const response = await fetch(`${base}${path}`, {
-    ...options,
-    headers
-  });
+  let response;
+  try {
+    response = await fetch(`${base}${path}`, {
+      ...options,
+      headers
+    });
+  } catch (error) {
+    const message = buildFetchErrorMessage(base, error?.message || "Failed to fetch");
+    throw new Error(message);
+  }
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -580,22 +869,62 @@ async function loadMe() {
   if (!storage.token) {
     appState.currentRole = "";
     setText(el.whoami, "Not logged in");
+    if (el.whoamiTop) setText(el.whoamiTop, "Guest");
+    applyRoleView();
     return;
   }
   try {
     const result = await api("/v1/auth/me", { method: "GET" });
     appState.currentRole = result?.data?.role || "";
     setText(el.whoami, `Logged in: ${result.data.full_name} (${result.data.role})`);
+    if (el.whoamiTop) setText(el.whoamiTop, `${result.data.full_name} (${result.data.role})`);
+    applyRoleView();
   } catch (error) {
     storage.token = "";
     appState.currentRole = "";
     setText(el.whoami, `Session invalid: ${error.message}`);
+    if (el.whoamiTop) setText(el.whoamiTop, "Guest");
+    applyRoleView();
   }
 }
 
 el.saveApiBase.addEventListener("click", () => {
-  storage.apiBase = el.apiBase.value.trim();
+  const base = normalizeBase(el.apiBase.value);
+  storage.apiBase = base;
+
+  const pageIsHttps = window.location.protocol === "https:";
+  const baseIsHttp = /^http:\/\//i.test(base);
+  if (pageIsHttps && (baseIsHttp || isLocalBase(base))) {
+    setText(el.whoami, "API base saved, but this HTTPS site cannot call local/non-HTTPS API. Use worker URL.");
+    return;
+  }
+
   setText(el.whoami, `API base saved: ${storage.apiBase}`);
+});
+
+el.quickCreateCaseBtn?.addEventListener("click", () => {
+  activateLane("lane-primary", { scroll: false });
+  document.getElementById("module-case")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  el.createCaseBtn?.click();
+});
+
+el.quickLoadFollowupsBtn?.addEventListener("click", () => {
+  activateLane("lane-primary", { scroll: false });
+  document.getElementById("module-followup")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  el.loadFollowupsBtn?.click();
+});
+
+el.quickRunDailyCloseBtn?.addEventListener("click", () => {
+  activateLane("lane-primary", { scroll: false });
+  document.getElementById("module-followup")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  el.runDailyCloseBtn?.click();
+});
+
+el.quickLoadArchiveIndexBtn?.addEventListener("click", () => {
+  if (el.quickLoadArchiveIndexBtn.disabled) return;
+  activateLane("lane-primary", { scroll: false });
+  document.getElementById("module-archive")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  el.loadArchiveIndexBtn?.click();
 });
 
 el.syncContextBtn?.addEventListener("click", () => {
@@ -696,12 +1025,17 @@ el.loginBtn.addEventListener("click", async () => {
   }
 });
 
-el.logoutBtn.addEventListener("click", () => {
+function handleLogout() {
   storage.token = "";
   appState.currentRole = "";
   setText(el.whoami, "Logged out");
+  if (el.whoamiTop) setText(el.whoamiTop, "Guest");
   clearAnalyticsOverview();
-});
+  applyRoleView();
+}
+
+el.logoutBtn.addEventListener("click", handleLogout);
+el.logoutTopBtn?.addEventListener("click", handleLogout);
 
 el.loadAnalyticsBtn?.addEventListener("click", async () => {
   try {
@@ -717,6 +1051,89 @@ el.loadAnalyticsBtn?.addEventListener("click", async () => {
 
 el.clearAnalyticsBtn?.addEventListener("click", () => {
   clearAnalyticsOverview();
+});
+
+el.saveAttendanceBtn?.addEventListener("click", async () => {
+  try {
+    const payload = {
+      employee_code: el.hrEmployeeCode.value.trim(),
+      employee_name: el.hrEmployeeName.value.trim(),
+      business_date_local: el.hrAttendanceDate.value.trim() || undefined,
+      attendance_status: el.hrAttendanceStatus.value,
+      hours_worked: toNumberOrNull(el.hrAttendanceHours.value),
+      notes: el.hrAttendanceNotes.value.trim() || undefined
+    };
+
+    const result = await api("/v1/hr/attendance", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    setPhase9Result({ action: "save_attendance", ...result });
+  } catch (error) {
+    setPhase9Result({ action: "save_attendance", error: error.message });
+  }
+});
+
+el.loadAttendanceBtn?.addEventListener("click", async () => {
+  try {
+    const params = new URLSearchParams();
+    if (el.hrEmployeeCode.value.trim()) params.set("employee_code", el.hrEmployeeCode.value.trim());
+    if (el.hrAttendanceStatus.value.trim()) params.set("attendance_status", el.hrAttendanceStatus.value.trim());
+    params.set("limit", "20");
+
+    const result = await api(`/v1/hr/attendance?${params.toString()}`, { method: "GET" });
+    setPhase9Result({ action: "load_attendance", ...result });
+  } catch (error) {
+    setPhase9Result({ action: "load_attendance", error: error.message });
+  }
+});
+
+el.createAdvanceBtn?.addEventListener("click", async () => {
+  try {
+    const payload = {
+      employee_code: el.hrEmployeeCode.value.trim(),
+      employee_name: el.hrEmployeeName.value.trim(),
+      advance_date_local: el.hrAdvanceDate.value.trim() || undefined,
+      amount_paise: toIntOrZero(el.hrAdvanceAmountPaise.value),
+      settled_amount_paise: toIntOrZero(el.hrAdvanceSettledPaise.value),
+      repayment_due_date_local: el.hrAdvanceRepaymentDate.value.trim() || undefined,
+      status: el.hrAdvanceStatus.value,
+      reason: el.hrAdvanceReason.value.trim() || undefined,
+      notes: el.hrAdvanceNotes.value.trim() || undefined
+    };
+
+    const result = await api("/v1/hr/advances", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    setPhase9Result({ action: "create_advance", ...result });
+  } catch (error) {
+    setPhase9Result({ action: "create_advance", error: error.message });
+  }
+});
+
+el.loadAdvancesBtn?.addEventListener("click", async () => {
+  try {
+    const params = new URLSearchParams();
+    if (el.hrEmployeeCode.value.trim()) params.set("employee_code", el.hrEmployeeCode.value.trim());
+    if (el.hrAdvanceStatus.value.trim()) params.set("status", el.hrAdvanceStatus.value.trim());
+    params.set("limit", "20");
+
+    const result = await api(`/v1/hr/advances?${params.toString()}`, { method: "GET" });
+    setPhase9Result({ action: "load_advances", ...result });
+  } catch (error) {
+    setPhase9Result({ action: "load_advances", error: error.message });
+  }
+});
+
+el.loadHrSummaryBtn?.addEventListener("click", async () => {
+  try {
+    const days = Math.max(1, toIntOrZero(el.hrSummaryDays.value || "30"));
+    const result = await api(`/v1/hr/summary?days=${days}`, { method: "GET" });
+    setPhase9Result({ action: "load_hr_summary", ...result });
+  } catch (error) {
+    setPhase9Result({ action: "load_hr_summary", error: error.message });
+  }
 });
 
 el.createCaseBtn.addEventListener("click", async () => {
@@ -1554,10 +1971,23 @@ el.createCreditNoteBtn.addEventListener("click", async () => {
 
 computePreview();
 updatePhase5StockWarning();
+wireButtonClickEffects();
+wireLaneNavigation();
+activateLane("lane-primary", { scroll: false });
+applyRoleView();
+setCompactMobileMode();
+window.addEventListener("resize", setCompactMobileMode);
 if (!el.expenseDateLocal.value) {
   el.expenseDateLocal.value = toDateLocalString();
 }
 if (!el.billDueDate.value) {
   el.billDueDate.value = toDateLocalString(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
 }
+if (el.hrAttendanceDate && !el.hrAttendanceDate.value) {
+  el.hrAttendanceDate.value = toDateLocalString();
+}
+if (el.hrAdvanceDate && !el.hrAdvanceDate.value) {
+  el.hrAdvanceDate.value = toDateLocalString();
+}
 loadMe();
+applyLoginGate();
