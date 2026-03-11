@@ -32,22 +32,22 @@ const el = {
   laneInventory: document.getElementById("lane-inventory"),
   laneAnalytics: document.getElementById("lane-analytics"),
   laneHr: document.getElementById("lane-hr"),
+  moduleCase: document.getElementById("module-case"),
+  moduleFollowup: document.getElementById("module-followup"),
   moduleBilling: document.getElementById("module-billing"),
   moduleArchive: document.getElementById("module-archive"),
   quickCreateCaseBtn: document.getElementById("quickCreateCaseBtn"),
+  quickSearchCaseBtn: document.getElementById("quickSearchCaseBtn"),
   quickLoadFollowupsBtn: document.getElementById("quickLoadFollowupsBtn"),
   quickRunDailyCloseBtn: document.getElementById("quickRunDailyCloseBtn"),
   quickLoadArchiveIndexBtn: document.getElementById("quickLoadArchiveIndexBtn"),
   quickActionsHint: document.getElementById("quickActionsHint"),
-  tabLanePrimary: document.getElementById("tabLanePrimary"),
-  tabLaneInventory: document.getElementById("tabLaneInventory"),
-  tabLaneAnalytics: document.getElementById("tabLaneAnalytics"),
-  tabLaneHr: document.getElementById("tabLaneHr"),
   caseNo: document.getElementById("caseNo"),
   customerName: document.getElementById("customerName"),
   customerPhone: document.getElementById("customerPhone"),
-  itemCategory: document.getElementById("itemCategory"),
-  reportedIssue: document.getElementById("reportedIssue"),
+  addCaseItemBtn: document.getElementById("addCaseItemBtn"),
+  clearCaseItemsBtn: document.getElementById("clearCaseItemsBtn"),
+  caseItemsContainer: document.getElementById("caseItemsContainer"),
   createCaseBtn: document.getElementById("createCaseBtn"),
   createResult: document.getElementById("createResult"),
   searchCaseNo: document.getElementById("searchCaseNo"),
@@ -239,6 +239,11 @@ const appState = {
   activeLane: "lane-primary"
 };
 
+const caseItemCategoryOptions = ["fan", "exhaust", "motor", "submersable"];
+const caseIntakeState = {
+  items: []
+};
+
 const MOBILE_BREAKPOINT = 820;
 
 function setText(node, text) {
@@ -281,7 +286,7 @@ function applyLoginGate() {
 
   if (!el.loginGateHint) return;
   if (loggedIn) {
-    setText(el.loginGateHint, "Workspace unlocked. Use lane tabs to navigate.");
+    setText(el.loginGateHint, "Workspace unlocked. Use Quick Navigator to move between lanes.");
   } else {
     setText(el.loginGateHint, "Login required to open operational lanes.");
   }
@@ -316,15 +321,6 @@ function wireButtonClickEffects() {
   });
 }
 
-function laneTabs() {
-  return [
-    el.tabLanePrimary,
-    el.tabLaneInventory,
-    el.tabLaneAnalytics,
-    el.tabLaneHr
-  ].filter(Boolean);
-}
-
 function laneNodes() {
   return [
     el.lanePrimary,
@@ -352,13 +348,6 @@ function activateLane(laneId, options = {}) {
     lane.classList.toggle("lane-active", lane.id === nextLaneId);
   });
 
-  laneTabs().forEach((tab) => {
-    const active = tab.dataset.laneTarget === nextLaneId;
-    tab.classList.toggle("is-active", active);
-    tab.classList.toggle("ghost", !active);
-    tab.setAttribute("aria-selected", active ? "true" : "false");
-  });
-
   appState.activeLane = nextLaneId;
   if (scroll) {
     document.getElementById(nextLaneId)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -369,15 +358,119 @@ function syncLaneWithRoleVisibility() {
   activateLane(appState.activeLane, { scroll: false });
 }
 
-function wireLaneNavigation() {
-  laneTabs().forEach((tab) => {
-    tab.addEventListener("click", () => {
-      const laneId = tab.dataset.laneTarget;
-      if (!laneId) return;
-      activateLane(laneId, { scroll: true });
-    });
+function getPrimaryModules() {
+  return [el.moduleCase, el.moduleFollowup, el.moduleArchive, el.moduleBilling]
+    .filter(Boolean)
+    .filter((node) => !node.classList.contains("is-hidden"));
+}
+
+function setPrimaryModuleActive(moduleId, options = {}) {
+  const { scroll = false } = options;
+  const modules = getPrimaryModules();
+  if (!modules.length) return;
+
+  const target = modules.find((node) => node.id === moduleId) || modules[0];
+  modules.forEach((node) => {
+    node.open = node.id === target.id;
   });
 
+  if (scroll) {
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
+
+function syncPrimaryModuleWithRoleVisibility() {
+  const modules = getPrimaryModules();
+  if (!modules.length) return;
+  const visibleOpen = modules.find((node) => node.open);
+  setPrimaryModuleActive(visibleOpen?.id || modules[0].id, { scroll: false });
+}
+
+function wirePrimaryModuleFocus() {
+  [el.moduleCase, el.moduleFollowup, el.moduleArchive, el.moduleBilling]
+    .filter(Boolean)
+    .forEach((node) => {
+      node.addEventListener("toggle", () => {
+        if (!node.open) return;
+        setPrimaryModuleActive(node.id, { scroll: false });
+      });
+    });
+}
+
+function casePanelTabs() {
+  return Array.from(document.querySelectorAll(".case-panel-tab[data-case-panel-target]"));
+}
+
+function casePanels() {
+  return Array.from(document.querySelectorAll(".case-panel"));
+}
+
+function setActiveCasePanel(panelId) {
+  const tabs = casePanelTabs();
+  const panels = casePanels();
+  if (!tabs.length || !panels.length) return;
+
+  const targetPanel = panels.find((panel) => panel.id === panelId) || panels[0];
+  panels.forEach((panel) => {
+    panel.classList.toggle("case-panel-active", panel.id === targetPanel.id);
+  });
+
+  tabs.forEach((tab) => {
+    const active = tab.dataset.casePanelTarget === targetPanel.id;
+    tab.classList.toggle("is-active", active);
+    tab.classList.toggle("ghost", !active);
+    tab.setAttribute("aria-selected", active ? "true" : "false");
+  });
+}
+
+function wireCaseFlowNavigation() {
+  casePanelTabs().forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const panelId = tab.dataset.casePanelTarget;
+      if (!panelId) return;
+      setActiveCasePanel(panelId);
+    });
+  });
+}
+
+function getStepPanels(groupId) {
+  return Array.from(document.querySelectorAll(`.step-panel[data-step-group="${groupId}"]`));
+}
+
+function getStepTabs(groupId) {
+  return Array.from(document.querySelectorAll(`.module-step-tab[data-step-group="${groupId}"]`));
+}
+
+function setActiveStepPanel(groupId, panelId) {
+  const panels = getStepPanels(groupId);
+  const tabs = getStepTabs(groupId);
+  if (!panels.length || !tabs.length) return;
+
+  const targetPanel = panels.find((panel) => panel.id === panelId) || panels[0];
+  panels.forEach((panel) => {
+    panel.classList.toggle("step-panel-active", panel.id === targetPanel.id);
+  });
+
+  tabs.forEach((tab) => {
+    const active = tab.dataset.stepTarget === targetPanel.id;
+    tab.classList.toggle("is-active", active);
+    tab.classList.toggle("ghost", !active);
+    tab.setAttribute("aria-selected", active ? "true" : "false");
+  });
+}
+
+function wireStepPanelNavigation() {
+  document.querySelectorAll(".module-step-tab[data-step-group][data-step-target]").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const groupId = tab.getAttribute("data-step-group") || "";
+      const targetId = tab.getAttribute("data-step-target") || "";
+      if (!groupId || !targetId) return;
+      setActiveStepPanel(groupId, targetId);
+    });
+  });
+}
+
+function wireLaneNavigation() {
   document.querySelectorAll(".jump-link[data-lane-target]").forEach((link) => {
     link.addEventListener("click", (event) => {
       const targetLane = link.getAttribute("data-lane-target");
@@ -389,6 +482,21 @@ function wireLaneNavigation() {
 
       if (href.startsWith("#")) {
         const anchor = document.querySelector(href);
+        if (anchor instanceof HTMLDetailsElement && anchor.id.startsWith("module-")) {
+          setPrimaryModuleActive(anchor.id, { scroll: false });
+        }
+
+        const casePanelTarget = link.getAttribute("data-case-panel-target") || "";
+        if (casePanelTarget) {
+          setActiveCasePanel(casePanelTarget);
+        }
+
+        const stepGroup = link.getAttribute("data-step-group") || "";
+        const stepTarget = link.getAttribute("data-step-target") || "";
+        if (stepGroup && stepTarget) {
+          setActiveStepPanel(stepGroup, stepTarget);
+        }
+
         anchor?.scrollIntoView({ behavior: "smooth", block: "start" });
       }
     });
@@ -409,6 +517,7 @@ function applyRoleView() {
     }
     applyLoginGate();
     syncLaneWithRoleVisibility();
+    syncPrimaryModuleWithRoleVisibility();
     return;
   }
 
@@ -421,6 +530,7 @@ function applyRoleView() {
     if (el.quickActionsHint) setText(el.quickActionsHint, "Admin mode: all lanes available.");
     applyLoginGate();
     syncLaneWithRoleVisibility();
+    syncPrimaryModuleWithRoleVisibility();
     return;
   }
 
@@ -433,6 +543,7 @@ function applyRoleView() {
     if (el.quickActionsHint) setText(el.quickActionsHint, "IT mode: HR lane hidden.");
     applyLoginGate();
     syncLaneWithRoleVisibility();
+    syncPrimaryModuleWithRoleVisibility();
     return;
   }
 
@@ -447,6 +558,7 @@ function applyRoleView() {
     }
     applyLoginGate();
     syncLaneWithRoleVisibility();
+    syncPrimaryModuleWithRoleVisibility();
     return;
   }
 
@@ -455,6 +567,7 @@ function applyRoleView() {
   }
   applyLoginGate();
   syncLaneWithRoleVisibility();
+  syncPrimaryModuleWithRoleVisibility();
 }
 
 function setCompactMobileMode() {
@@ -507,6 +620,64 @@ function toStampCompact(date = new Date()) {
   const mi = String(date.getMinutes()).padStart(2, "0");
   const ss = String(date.getSeconds()).padStart(2, "0");
   return `${yyyy}${mm}${dd}${hh}${mi}${ss}`;
+}
+
+function caseItemLabelFromIndex(index) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  if (index < alphabet.length) return alphabet[index];
+  return `I${index + 1}`;
+}
+
+function createCaseItemDraft() {
+  return {
+    category: "fan",
+    reportedIssue: ""
+  };
+}
+
+function renderCaseItemsUI() {
+  if (!el.caseItemsContainer) return;
+
+  if (!caseIntakeState.items.length) {
+    caseIntakeState.items.push(createCaseItemDraft());
+  }
+
+  el.caseItemsContainer.innerHTML = caseIntakeState.items
+    .map((item, index) => {
+      const label = caseItemLabelFromIndex(index);
+      const options = caseItemCategoryOptions
+        .map((opt) => `<option value="${opt}" ${item.category === opt ? "selected" : ""}>${opt}</option>`)
+        .join("");
+
+      return `
+        <div class="case-intake-item" data-item-index="${index}">
+          <div class="case-intake-item-head">
+            <b>Item ${label}</b>
+            <button type="button" class="ghost remove-case-item-btn" data-remove-index="${index}" ${caseIntakeState.items.length === 1 ? "disabled" : ""}>Remove</button>
+          </div>
+          <div class="workflow-grid">
+            <div>
+              <label>Item Category</label>
+              <select class="case-item-category" data-index="${index}">${options}</select>
+            </div>
+            <div>
+              <label>Reported Issue</label>
+              <input class="case-item-issue" data-index="${index}" value="${item.reportedIssue || ""}" placeholder="Not rotating / low pressure" />
+            </div>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+function getNormalizedCaseItems() {
+  return caseIntakeState.items
+    .map((item) => ({
+      item_category: String(item.category || "").trim().toLowerCase(),
+      reported_issue: String(item.reportedIssue || "").trim()
+    }))
+    .filter((item) => item.item_category && item.reported_issue);
 }
 
 function parseCsvInts(value, fallback = [7, 3, 0]) {
@@ -904,18 +1075,30 @@ el.saveApiBase.addEventListener("click", () => {
 
 el.quickCreateCaseBtn?.addEventListener("click", () => {
   activateLane("lane-primary", { scroll: false });
+  setPrimaryModuleActive("module-case", { scroll: false });
+  setActiveCasePanel("case-panel-create");
   document.getElementById("module-case")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  el.createCaseBtn?.click();
+});
+
+el.quickSearchCaseBtn?.addEventListener("click", () => {
+  activateLane("lane-primary", { scroll: false });
+  setPrimaryModuleActive("module-case", { scroll: false });
+  setActiveCasePanel("case-panel-search");
+  document.getElementById("module-case")?.scrollIntoView({ behavior: "smooth", block: "start" });
 });
 
 el.quickLoadFollowupsBtn?.addEventListener("click", () => {
   activateLane("lane-primary", { scroll: false });
+  setPrimaryModuleActive("module-followup", { scroll: false });
+  setActiveStepPanel("followup", "followup-panel-queue");
   document.getElementById("module-followup")?.scrollIntoView({ behavior: "smooth", block: "start" });
   el.loadFollowupsBtn?.click();
 });
 
 el.quickRunDailyCloseBtn?.addEventListener("click", () => {
   activateLane("lane-primary", { scroll: false });
+  setPrimaryModuleActive("module-followup", { scroll: false });
+  setActiveStepPanel("followup", "followup-panel-close");
   document.getElementById("module-followup")?.scrollIntoView({ behavior: "smooth", block: "start" });
   el.runDailyCloseBtn?.click();
 });
@@ -923,6 +1106,8 @@ el.quickRunDailyCloseBtn?.addEventListener("click", () => {
 el.quickLoadArchiveIndexBtn?.addEventListener("click", () => {
   if (el.quickLoadArchiveIndexBtn.disabled) return;
   activateLane("lane-primary", { scroll: false });
+  setPrimaryModuleActive("module-archive", { scroll: false });
+  setActiveStepPanel("archive", "archive-panel-index");
   document.getElementById("module-archive")?.scrollIntoView({ behavior: "smooth", block: "start" });
   el.loadArchiveIndexBtn?.click();
 });
@@ -1138,6 +1323,12 @@ el.loadHrSummaryBtn?.addEventListener("click", async () => {
 
 el.createCaseBtn.addEventListener("click", async () => {
   try {
+    const items = getNormalizedCaseItems();
+    if (!items.length) {
+      setText(el.createResult, "Create failed: add at least one valid item with category + reported issue");
+      return;
+    }
+
     const result = await api("/v1/cases", {
       method: "POST",
       body: JSON.stringify({
@@ -1146,17 +1337,17 @@ el.createCaseBtn.addEventListener("click", async () => {
           name: el.customerName.value.trim(),
           phone: el.customerPhone.value.trim()
         },
-        item: {
-          item_category: el.itemCategory.value.trim(),
-          reported_issue: el.reportedIssue.value.trim()
-        }
+        items
       })
     });
 
-    setText(el.createResult, `Created: case_id=${result.data.case_id}, item_id=${result.data.case_item_id}`);
+    const createdItems = Array.isArray(result?.data?.case_items) ? result.data.case_items : [];
+    const createdCount = createdItems.length || (result?.data?.total_units_received ?? items.length);
+    setText(el.createResult, `Created: case_id=${result.data.case_id}, items=${createdCount}, primary_item_id=${result.data.case_item_id}`);
     el.statusCaseId.value = result.data.case_id;
     el.statusItemId.value = result.data.case_item_id;
     syncOperationalContextFromCase();
+    setActiveCasePanel("case-panel-status");
   } catch (error) {
     setText(el.createResult, `Create failed: ${error.message}`);
   }
@@ -1219,6 +1410,7 @@ el.searchResults.addEventListener("click", (event) => {
   el.statusCaseId.value = caseId;
   el.estimateCaseId.value = caseId;
   el.phase5CaseId.value = caseId;
+  setActiveCasePanel("case-panel-status");
   setText(el.statusResult, `Case selected: ${caseId}. Load item IDs from case detail flow if needed.`);
 });
 
@@ -1695,6 +1887,7 @@ el.loadFollowupsBtn.addEventListener("click", async () => {
     if (!el.followupCaseId.value.trim()) {
       el.followupCaseId.value = result.data[0].case_id;
     }
+    setActiveStepPanel("followup", "followup-panel-note");
   } catch (error) {
     el.followupResults.innerHTML = `<p class='hint'>Follow-up load failed: ${error.message}</p>`;
   }
@@ -1971,9 +2164,63 @@ el.createCreditNoteBtn.addEventListener("click", async () => {
 
 computePreview();
 updatePhase5StockWarning();
+renderCaseItemsUI();
+
+el.addCaseItemBtn?.addEventListener("click", () => {
+  caseIntakeState.items.push(createCaseItemDraft());
+  renderCaseItemsUI();
+});
+
+el.clearCaseItemsBtn?.addEventListener("click", () => {
+  caseIntakeState.items = [createCaseItemDraft()];
+  renderCaseItemsUI();
+});
+
+el.caseItemsContainer?.addEventListener("input", (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+
+  if (target.classList.contains("case-item-issue")) {
+    const index = Number(target.getAttribute("data-index"));
+    if (!Number.isInteger(index) || !caseIntakeState.items[index]) return;
+    caseIntakeState.items[index].reportedIssue = target.value;
+  }
+});
+
+el.caseItemsContainer?.addEventListener("change", (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+
+  if (target.classList.contains("case-item-category")) {
+    const index = Number(target.getAttribute("data-index"));
+    if (!Number.isInteger(index) || !caseIntakeState.items[index]) return;
+    caseIntakeState.items[index].category = target.value;
+  }
+});
+
+el.caseItemsContainer?.addEventListener("click", (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+  if (!target.classList.contains("remove-case-item-btn")) return;
+
+  const index = Number(target.getAttribute("data-remove-index"));
+  if (!Number.isInteger(index)) return;
+  if (caseIntakeState.items.length <= 1) return;
+  caseIntakeState.items.splice(index, 1);
+  renderCaseItemsUI();
+});
+
 wireButtonClickEffects();
 wireLaneNavigation();
+wirePrimaryModuleFocus();
+wireCaseFlowNavigation();
+wireStepPanelNavigation();
 activateLane("lane-primary", { scroll: false });
+setPrimaryModuleActive("module-case", { scroll: false });
+setActiveCasePanel("case-panel-create");
+setActiveStepPanel("followup", "followup-panel-queue");
+setActiveStepPanel("archive", "archive-panel-usage");
+setActiveStepPanel("billing", "billing-panel-estimate");
 applyRoleView();
 setCompactMobileMode();
 window.addEventListener("resize", setCompactMobileMode);

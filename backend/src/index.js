@@ -825,9 +825,32 @@ export default {
         return json(400, { code: "VALIDATION_ERROR", message: "case_no is required and must match offline format" });
       }
 
-      const item = body?.item || {};
-      if (!ensureNonEmptyString(item?.item_category) || !ensureNonEmptyString(item?.reported_issue)) {
-        return json(400, { code: "VALIDATION_ERROR", message: "item.item_category and item.reported_issue are required" });
+      const incomingItems = Array.isArray(body?.items)
+        ? body.items
+        : (body?.item ? [body.item] : []);
+
+      const normalizedItems = incomingItems
+        .map((row) => ({
+          item_category: ensureNonEmptyString(row?.item_category) ? row.item_category.trim() : "",
+          brand: ensureNonEmptyString(row?.brand) ? row.brand.trim() : null,
+          model: ensureNonEmptyString(row?.model) ? row.model.trim() : null,
+          serial_no: ensureNonEmptyString(row?.serial_no) ? row.serial_no.trim() : null,
+          color: ensureNonEmptyString(row?.color) ? row.color.trim() : null,
+          condition_in: ensureNonEmptyString(row?.condition_in) ? row.condition_in.trim() : null,
+          reported_issue: ensureNonEmptyString(row?.reported_issue) ? row.reported_issue.trim() : "",
+          diagnosis_notes: ensureNonEmptyString(row?.diagnosis_notes) ? row.diagnosis_notes.trim() : null,
+          repairability: ensureNonEmptyString(row?.repairability) ? row.repairability.trim() : null,
+          promised_date_local: ensureNonEmptyString(row?.promised_date_local) ? row.promised_date_local.trim() : null
+        }))
+        .filter((row) => row.item_category || row.reported_issue);
+
+      if (!normalizedItems.length) {
+        return json(400, { code: "VALIDATION_ERROR", message: "Provide at least one item via item or items[]" });
+      }
+
+      const hasInvalidItem = normalizedItems.some((row) => !row.item_category || !row.reported_issue);
+      if (hasInvalidItem) {
+        return json(400, { code: "VALIDATION_ERROR", message: "Each item requires item_category and reported_issue" });
       }
 
       const serviceClient = auth.serviceClient;
@@ -847,7 +870,7 @@ export default {
         received_at_utc: receivedAtUtc,
         received_business_date_local: businessDate,
         intake_mode: ensureNonEmptyString(body?.intake_mode) ? body.intake_mode : "walk_in",
-        total_units_received: 1,
+        total_units_received: normalizedItems.length,
         priority: ensureNonEmptyString(body?.priority) ? body.priority : "normal",
         header_status: "Received",
         notes: body?.notes || null,
@@ -872,47 +895,55 @@ export default {
         return json(500, { code: "CASE_CREATE_FAILED", message: "Unable to create case" });
       }
 
-      const { data: newItem, error: itemErr } = await serviceClient
-        .from("case_items")
-        .insert({
-          tenant_id: auth.user.tenantId,
-          case_id: newCase.id,
-          line_no: 1,
-          item_category: item.item_category.trim(),
-          brand: item.brand || null,
-          model: item.model || null,
-          serial_no: item.serial_no || null,
-          color: item.color || null,
-          condition_in: item.condition_in || null,
-          reported_issue: item.reported_issue.trim(),
-          diagnosis_notes: item.diagnosis_notes || null,
-          repairability: item.repairability || null,
-          item_status: "Received",
-          promised_date_local: item.promised_date_local || null,
-          created_at: nowIso,
-          updated_at: nowIso,
-          created_by: auth.user.id,
-          updated_by: auth.user.id,
-          is_active: true
-        })
-        .select("id, line_no, item_status")
-        .single();
+      const caseItemsPayload = normalizedItems.map((itemRow, index) => ({
+        tenant_id: auth.user.tenantId,
+        case_id: newCase.id,
+        line_no: index + 1,
+        item_category: itemRow.item_category,
+        brand: itemRow.brand,
+        model: itemRow.model,
+        serial_no: itemRow.serial_no,
+        color: itemRow.color,
+        condition_in: itemRow.condition_in,
+        reported_issue: itemRow.reported_issue,
+        diagnosis_notes: itemRow.diagnosis_notes,
+        repairability: itemRow.repairability,
+        item_status: "Received",
+        promised_date_local: itemRow.promised_date_local,
+        created_at: nowIso,
+        updated_at: nowIso,
+        created_by: auth.user.id,
+        updated_by: auth.user.id,
+        is_active: true
+      }));
 
-      if (itemErr) {
+      const { data: newItems, error: itemErr } = await serviceClient
+        .from("case_items")
+        .insert(caseItemsPayload)
+        .select("id, line_no, item_status, item_category, reported_issue")
+        .order("line_no", { ascending: true });
+
+      if (itemErr || !newItems || newItems.length !== normalizedItems.length) {
         await serviceClient.from("cases").delete().eq("id", newCase.id);
         return json(500, { code: "CASE_ITEM_CREATE_FAILED", message: "Case header created but item insert failed and was rolled back" });
       }
 
-      await writeCaseStatusHistory(serviceClient, {
-        tenant_id: auth.user.tenantId,
-        case_id: newCase.id,
-        case_item_id: newItem.id,
-        from_status: null,
-        to_status: "Received",
-        changed_at_utc: nowIso,
-        changed_by: auth.user.id,
-        note: "Case created"
-      });
+      await Promise.all(
+        newItems.map((createdItem) =>
+          writeCaseStatusHistory(serviceClient, {
+            tenant_id: auth.user.tenantId,
+            case_id: newCase.id,
+            case_item_id: createdItem.id,
+            from_status: null,
+            to_status: "Received",
+            changed_at_utc: nowIso,
+            changed_by: auth.user.id,
+            note: "Case created"
+          })
+        )
+      );
+
+      const primaryItem = newItems[0];
 
       return json(201, {
         code: "OK",
@@ -921,8 +952,10 @@ export default {
           case_id: newCase.id,
           case_no: newCase.case_no,
           header_status: newCase.header_status,
-          case_item_id: newItem.id,
-          case_item_status: newItem.item_status
+          total_units_received: normalizedItems.length,
+          case_item_id: primaryItem.id,
+          case_item_status: primaryItem.item_status,
+          case_items: newItems
         }
       });
     }

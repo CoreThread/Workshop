@@ -20,12 +20,12 @@
         <span id="whoamiTop" class="session-user">Admin</span>
         <button id="logoutTopBtn" class="ghost">Logout</button>
       </div>
-      <div class="hero-badges">
+      <!-- <div class="hero-badges">
         <span class="chip"><strong>Primary</strong> Case + Follow-up + Backup</span>
         <span class="chip"><strong>Secondary</strong> Inventory</span>
         <span class="chip"><strong>Tertiary</strong> Analytics</span>
         <span class="chip"><strong>Final</strong> HR</span>
-      </div>
+      </div> -->
     </header>
 
     <section class="card auth-card" id="setup">
@@ -58,6 +58,7 @@
       <p class="hint">One-tap daily actions for the highest-frequency workflow.</p>
       <div class="quick-actions-grid">
         <button id="quickCreateCaseBtn">Create Case</button>
+        <button id="quickSearchCaseBtn" class="ghost">Search Case</button>
         <button id="quickLoadFollowupsBtn" class="ghost">Load Follow-ups</button>
         <button id="quickRunDailyCloseBtn" class="ghost">Run Daily Close</button>
         <button id="quickLoadArchiveIndexBtn" class="ghost">Load Archive Index</button>
@@ -65,26 +66,20 @@
       <p id="quickActionsHint" class="hint"></p>
     </section>
 
-    <section class="card workspace-switcher" id="workspaceSwitcher">
-      <h2>Workspace</h2>
-      <p class="hint">Open one lane at a time to keep the interface focused.</p>
-      <div class="workspace-tabs" role="tablist" aria-label="Lane workspace switcher">
-        <button id="tabLanePrimary" class="lane-tab" data-lane-target="lane-primary" role="tab" aria-selected="true">Core Ops</button>
-        <button id="tabLaneInventory" class="lane-tab ghost" data-lane-target="lane-inventory" role="tab" aria-selected="false">Inventory</button>
-        <button id="tabLaneAnalytics" class="lane-tab ghost" data-lane-target="lane-analytics" role="tab" aria-selected="false">Analytics</button>
-        <button id="tabLaneHr" class="lane-tab ghost" data-lane-target="lane-hr" role="tab" aria-selected="false">HR</button>
-      </div>
-    </section>
-
     <div class="layout-grid">
       <aside class="card nav-card">
         <h2>Quick Navigator</h2>
         <p class="hint">Jump by operational flow, not by phase number.</p>
-        <a href="#lane-primary" class="jump-link" data-lane-target="lane-primary">1. Core Ops Lane</a>
-        <a href="#module-case" class="jump-link" data-lane-target="lane-primary">Case Intake + Status</a>
-        <a href="#module-followup" class="jump-link" data-lane-target="lane-primary">Follow-up + Daily Close</a>
-        <a href="#module-archive" class="jump-link" data-lane-target="lane-primary">Backup + Archive Admin</a>
-        <a href="#module-billing" class="jump-link" data-lane-target="lane-primary">Estimate + Billing Lock</a>
+        <p class="hint nav-group-label">Core Ops</p>
+        <a href="#module-case" class="jump-link" data-lane-target="lane-primary">1.1 Create New Case</a>
+        <a href="#module-case" class="jump-link" data-lane-target="lane-primary" data-case-panel-target="case-panel-search">1.2 Search Existing Cases</a>
+        <a href="#module-case" class="jump-link" data-lane-target="lane-primary" data-case-panel-target="case-panel-status">1.3 Case Status Update</a>
+        <a href="#module-followup" class="jump-link" data-lane-target="lane-primary" data-step-group="followup" data-step-target="followup-panel-queue">1.4 Follow-up Queue</a>
+        <a href="#module-followup" class="jump-link" data-lane-target="lane-primary" data-step-group="followup" data-step-target="followup-panel-close">1.5 Daily Close</a>
+        <a href="#module-billing" class="jump-link" data-lane-target="lane-primary" data-step-group="billing" data-step-target="billing-panel-estimate">1.6 Create Estimate</a>
+        <a href="#module-billing" class="jump-link" data-lane-target="lane-primary" data-step-group="billing" data-step-target="billing-panel-finalize">1.7 Finalize + Lock</a>
+        <a href="#module-archive" class="jump-link" data-lane-target="lane-primary" data-step-group="archive" data-step-target="archive-panel-index">1.8 Archive Index + Restore</a>
+        <p class="hint nav-group-label">Other Lanes</p>
         <a href="#lane-inventory" class="jump-link" data-lane-target="lane-inventory">2. Inventory Lane</a>
         <a href="#lane-analytics" class="jump-link" data-lane-target="lane-analytics">3. Analytics Lane</a>
         <a href="#lane-hr" class="jump-link" data-lane-target="lane-hr">4. HR Lane</a>
@@ -99,275 +94,342 @@
 
           <details class="card" id="module-case" open>
             <summary>Case Intake + Status (Phase 2)</summary>
-            <div class="workflow-grid">
-              <div>
-                <label>Case No</label>
-                <input id="caseNo" placeholder="AJ-101" />
-              </div>
-              <div>
-                <label>Item Category</label>
-                <input id="itemCategory" value="fan" />
-              </div>
-              <div>
-                <label>Customer Name</label>
-                <input id="customerName" placeholder="Ramesh" />
-              </div>
-              <div>
-                <label>Customer Phone</label>
-                <input id="customerPhone" placeholder="9876500011" />
-              </div>
+            <p class="hint">Work in sequence: create case, then search/use case context, then update item status.</p>
+            <div class="case-flow-switcher" role="tablist" aria-label="Case workflow switcher">
+              <button type="button" id="casePanelCreateBtn" class="case-panel-tab is-active" data-case-panel-target="case-panel-create" role="tab" aria-selected="true">1. Create New Case</button>
+              <button type="button" id="casePanelSearchBtn" class="case-panel-tab ghost" data-case-panel-target="case-panel-search" role="tab" aria-selected="false">2. Search Existing Cases</button>
+              <button type="button" id="casePanelStatusBtn" class="case-panel-tab ghost" data-case-panel-target="case-panel-status" role="tab" aria-selected="false">3. Case Status Update</button>
             </div>
-            <label>Reported Issue</label>
-            <input id="reportedIssue" placeholder="Not rotating" />
-            <button id="createCaseBtn">Create Case</button>
-            <p id="createResult" class="hint"></p>
 
-            <div class="workflow-grid">
-              <div>
-                <label>Search By Case No</label>
-                <input id="searchCaseNo" placeholder="AJ-101" />
-              </div>
-              <div>
-                <label>Search By Phone</label>
-                <input id="searchPhone" placeholder="9876500011" />
-              </div>
-            </div>
-            <button id="searchBtn" class="ghost">Search Cases</button>
-            <div id="searchResults"></div>
+            <section class="case-flow-block case-panel case-panel-active" id="case-panel-create">
+                <h3>Create New Case</h3>
+                <div class="workflow-grid">
+                  <div>
+                    <label>Case No</label>
+                    <input id="caseNo" placeholder="AJ-101" />
+                  </div>
+                  <div>
+                    <label>Customer Name</label>
+                    <input id="customerName" placeholder="Ramesh" />
+                  </div>
+                  <div>
+                    <label>Customer Phone</label>
+                    <input id="customerPhone" placeholder="9876500011" />
+                  </div>
+                </div>
 
-            <div class="workflow-grid">
-              <div>
-                <label>Case ID</label>
-                <input id="statusCaseId" />
+                <div class="row">
+                  <button id="addCaseItemBtn" type="button" class="ghost">Add Item</button>
+                  <button id="clearCaseItemsBtn" type="button" class="ghost">Reset Items</button>
+                </div>
+
+                <div id="caseItemsContainer" class="case-items-container"></div>
+                <button id="createCaseBtn">Create Case</button>
+                <p id="createResult" class="hint"></p>
+              </section>
+
+              <section class="case-flow-block case-panel" id="case-panel-search">
+                <h3>Search Existing Cases</h3>
+                <div class="workflow-grid">
+                  <div>
+                    <label>Search By Case No</label>
+                    <input id="searchCaseNo" placeholder="AJ-101" />
+                  </div>
+                  <div>
+                    <label>Search By Phone</label>
+                    <input id="searchPhone" placeholder="9876500011" />
+                  </div>
+                </div>
+                <button id="searchBtn" class="ghost">Search Cases</button>
+                <div id="searchResults"></div>
+              </section>
+
+            <section class="case-flow-block case-panel" id="case-panel-status">
+              <h3>Case Status Update</h3>
+              <div class="workflow-grid">
+                <div>
+                  <label>Case ID</label>
+                  <input id="statusCaseId" />
+                </div>
+                <div>
+                  <label>Case Item ID</label>
+                  <input id="statusItemId" />
+                </div>
+                <div>
+                  <label>To Status</label>
+                  <select id="toStatus">
+                    <option>Diagnosis</option>
+                    <option>WaitingApproval</option>
+                    <option>ApprovedForRepair</option>
+                    <option>RejectedByCustomer</option>
+                    <option>InRepair</option>
+                    <option>Ready</option>
+                    <option>Delivered</option>
+                    <option>Cancelled</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Status Note</label>
+                  <input id="statusNote" placeholder="optional note" />
+                </div>
               </div>
-              <div>
-                <label>Case Item ID</label>
-                <input id="statusItemId" />
+              <div class="row">
+                <button id="updateStatusBtn">Update Status</button>
+                <button id="historyBtn" class="ghost">Load Status History</button>
               </div>
-              <div>
-                <label>To Status</label>
-                <select id="toStatus">
-                  <option>Diagnosis</option>
-                  <option>WaitingApproval</option>
-                  <option>ApprovedForRepair</option>
-                  <option>RejectedByCustomer</option>
-                  <option>InRepair</option>
-                  <option>Ready</option>
-                  <option>Delivered</option>
-                  <option>Cancelled</option>
-                </select>
-              </div>
-              <div>
-                <label>Status Note</label>
-                <input id="statusNote" placeholder="optional note" />
-              </div>
-            </div>
-            <div class="row">
-              <button id="updateStatusBtn">Update Status</button>
-              <button id="historyBtn" class="ghost">Load Status History</button>
-            </div>
-            <p id="statusResult" class="hint"></p>
-            <pre id="history"></pre>
+              <p id="statusResult" class="hint"></p>
+              <pre id="history"></pre>
+            </section>
           </details>
 
-          <details class="card" id="module-followup" open>
+          <details class="card" id="module-followup">
             <summary>Follow-up + Daily Close (Phase 3)</summary>
-            <div class="workflow-grid">
-              <div>
-                <label>Queue</label>
-                <select id="followupQueue">
-                  <option value="pending_approvals">pending_approvals</option>
-                  <option value="pending_pickups">pending_pickups</option>
-                </select>
-              </div>
-              <div>
-                <label>Item Status (optional)</label>
-                <input id="followupStatus" placeholder="WaitingApproval" />
-              </div>
+            <p class="hint">Run in sequence: queue -> note -> daily close.</p>
+            <div class="module-step-switcher" role="tablist" aria-label="Follow-up workflow switcher">
+              <button type="button" class="module-step-tab is-active" data-step-group="followup" data-step-target="followup-panel-queue" role="tab" aria-selected="true">1. Queue</button>
+              <button type="button" class="module-step-tab ghost" data-step-group="followup" data-step-target="followup-panel-note" role="tab" aria-selected="false">2. Note Update</button>
+              <button type="button" class="module-step-tab ghost" data-step-group="followup" data-step-target="followup-panel-close" role="tab" aria-selected="false">3. Daily Close</button>
             </div>
-            <button id="loadFollowupsBtn">Load Follow-ups</button>
-            <div id="followupResults"></div>
 
-            <label>Case ID (for note update)</label>
-            <input id="followupCaseId" />
-            <label>Follow-up Note</label>
-            <input id="followupNote" placeholder="Called customer" />
-            <button id="saveFollowupNoteBtn" class="ghost">Save Follow-up Note</button>
-            <p id="followupResult" class="hint"></p>
+            <section class="case-flow-block step-panel step-panel-active" id="followup-panel-queue" data-step-group="followup">
+              <h3>Follow-up Queue</h3>
+              <div class="workflow-grid">
+                <div>
+                  <label>Queue</label>
+                  <select id="followupQueue">
+                    <option value="pending_approvals">pending_approvals</option>
+                    <option value="pending_pickups">pending_pickups</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Item Status (optional)</label>
+                  <input id="followupStatus" placeholder="WaitingApproval" />
+                </div>
+              </div>
+              <button id="loadFollowupsBtn">Load Follow-ups</button>
+              <div id="followupResults"></div>
+            </section>
 
-            <label>Daily Close Note</label>
-            <input id="dailyCloseNote" placeholder="EOD close" />
-            <div class="row">
-              <button id="runDailyCloseBtn">Run Daily Close</button>
-              <button id="loadDailyCloseBtn" class="ghost">Load Latest Daily Close</button>
-            </div>
-            <pre id="dailyCloseResult"></pre>
+            <section class="case-flow-block step-panel" id="followup-panel-note" data-step-group="followup">
+              <h3>Save Follow-up Note</h3>
+              <label>Case ID (for note update)</label>
+              <input id="followupCaseId" />
+              <label>Follow-up Note</label>
+              <input id="followupNote" placeholder="Called customer" />
+              <button id="saveFollowupNoteBtn" class="ghost">Save Follow-up Note</button>
+              <p id="followupResult" class="hint"></p>
+            </section>
+
+            <section class="case-flow-block step-panel" id="followup-panel-close" data-step-group="followup">
+              <h3>Daily Close</h3>
+              <label>Daily Close Note</label>
+              <input id="dailyCloseNote" placeholder="EOD close" />
+              <div class="row">
+                <button id="runDailyCloseBtn">Run Daily Close</button>
+                <button id="loadDailyCloseBtn" class="ghost">Load Latest Daily Close</button>
+              </div>
+              <pre id="dailyCloseResult"></pre>
+            </section>
           </details>
 
-          <details class="card" id="module-archive" open>
+          <details class="card" id="module-archive">
             <summary>Backup + Archive Admin (Phase 6)</summary>
-            <h3>Save DB Usage Snapshot</h3>
-            <div class="workflow-grid">
-              <div>
-                <label>Usage MB</label>
-                <input id="archiveUsageMb" value="475" />
-              </div>
-              <div>
-                <label>Quota MB</label>
-                <input id="archiveQuotaMb" value="500" />
-              </div>
-              <div>
-                <label>Threshold %</label>
-                <input id="archiveThresholdPct" value="90" />
-              </div>
-              <div>
-                <label>Source</label>
-                <input id="archiveUsageSource" value="ui-manual" />
-              </div>
-            </div>
-            <div class="row">
-              <button id="saveDbUsageBtn">Save DB Usage Snapshot</button>
-              <button id="loadDbUsageBtn" class="ghost">Load DB Usage</button>
+            <p class="hint">Run in sequence: usage snapshot -> trigger check -> index lookup and restore.</p>
+            <div class="module-step-switcher" role="tablist" aria-label="Archive workflow switcher">
+              <button type="button" class="module-step-tab is-active" data-step-group="archive" data-step-target="archive-panel-usage" role="tab" aria-selected="true">1. DB Usage</button>
+              <button type="button" class="module-step-tab ghost" data-step-group="archive" data-step-target="archive-panel-trigger" role="tab" aria-selected="false">2. Trigger Check</button>
+              <button type="button" class="module-step-tab ghost" data-step-group="archive" data-step-target="archive-panel-index" role="tab" aria-selected="false">3. Index + Restore</button>
             </div>
 
-            <h3>Archive Trigger Check</h3>
-            <div class="workflow-grid">
-              <div>
-                <label>Force Trigger Check</label>
-                <select id="archiveTriggerForce">
-                  <option value="false" selected>false</option>
-                  <option value="true">true</option>
-                </select>
+            <section class="case-flow-block step-panel step-panel-active" id="archive-panel-usage" data-step-group="archive">
+              <h3>Save DB Usage Snapshot</h3>
+              <div class="workflow-grid">
+                <div>
+                  <label>Usage MB</label>
+                  <input id="archiveUsageMb" value="475" />
+                </div>
+                <div>
+                  <label>Quota MB</label>
+                  <input id="archiveQuotaMb" value="500" />
+                </div>
+                <div>
+                  <label>Threshold %</label>
+                  <input id="archiveThresholdPct" value="90" />
+                </div>
+                <div>
+                  <label>Source</label>
+                  <input id="archiveUsageSource" value="ui-manual" />
+                </div>
               </div>
-              <div>
-                <label>Candidate Limit</label>
-                <input id="archiveTriggerLimit" value="10" />
+              <div class="row">
+                <button id="saveDbUsageBtn">Save DB Usage Snapshot</button>
+                <button id="loadDbUsageBtn" class="ghost">Load DB Usage</button>
               </div>
-            </div>
-            <button id="runArchiveTriggerCheckBtn" class="accent">Run Archive Trigger Check</button>
+            </section>
 
-            <h3>Archive Index Lookup + Restore</h3>
-            <div class="workflow-grid">
-              <div>
-                <label>Case No (optional)</label>
-                <input id="archiveIndexCaseNo" placeholder="P6A-PROD-..." />
+            <section class="case-flow-block step-panel" id="archive-panel-trigger" data-step-group="archive">
+              <h3>Archive Trigger Check</h3>
+              <div class="workflow-grid">
+                <div>
+                  <label>Force Trigger Check</label>
+                  <select id="archiveTriggerForce">
+                    <option value="false" selected>false</option>
+                    <option value="true">true</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Candidate Limit</label>
+                  <input id="archiveTriggerLimit" value="10" />
+                </div>
               </div>
-              <div>
-                <label>Phone (optional)</label>
-                <input id="archiveIndexPhone" placeholder="98..." />
-              </div>
-              <div>
-                <label>Customer Name (optional)</label>
-                <input id="archiveIndexCustomerName" placeholder="name" />
-              </div>
-              <div>
-                <label>Restore Status (optional)</label>
-                <select id="archiveIndexRestoreStatus">
-                  <option value="" selected>all</option>
-                  <option value="ARCHIVED">ARCHIVED</option>
-                  <option value="RESTORED">RESTORED</option>
-                </select>
-              </div>
-            </div>
-            <button id="loadArchiveIndexBtn" class="ghost">Load Archive Index</button>
+              <button id="runArchiveTriggerCheckBtn" class="accent">Run Archive Trigger Check</button>
+            </section>
 
-            <label>Archive ID</label>
-            <input id="archiveRestoreId" placeholder="archive_id" />
-            <button id="restoreArchiveBtn" class="warn">Restore Archived Case</button>
-            <pre id="archiveAdminResult"></pre>
+            <section class="case-flow-block step-panel" id="archive-panel-index" data-step-group="archive">
+              <h3>Archive Index Lookup + Restore</h3>
+              <div class="workflow-grid">
+                <div>
+                  <label>Case No (optional)</label>
+                  <input id="archiveIndexCaseNo" placeholder="P6A-PROD-..." />
+                </div>
+                <div>
+                  <label>Phone (optional)</label>
+                  <input id="archiveIndexPhone" placeholder="98..." />
+                </div>
+                <div>
+                  <label>Customer Name (optional)</label>
+                  <input id="archiveIndexCustomerName" placeholder="name" />
+                </div>
+                <div>
+                  <label>Restore Status (optional)</label>
+                  <select id="archiveIndexRestoreStatus">
+                    <option value="" selected>all</option>
+                    <option value="ARCHIVED">ARCHIVED</option>
+                    <option value="RESTORED">RESTORED</option>
+                  </select>
+                </div>
+              </div>
+              <button id="loadArchiveIndexBtn" class="ghost">Load Archive Index</button>
+
+              <label>Archive ID</label>
+              <input id="archiveRestoreId" placeholder="archive_id" />
+              <button id="restoreArchiveBtn" class="warn">Restore Archived Case</button>
+              <pre id="archiveAdminResult"></pre>
+            </section>
           </details>
 
-          <details class="card phase4-card" id="module-billing" open>
+          <details class="card phase4-card" id="module-billing">
             <summary>Estimate + Billing Lock (Phase 4)</summary>
-            <p class="hint">Sequence: Create Estimate -> Decision -> Finalize -> Override (if needed) -> Credit Note.</p>
+            <p class="hint">Run in sequence: context + estimate -> decision -> finalize -> override/credit note -> snapshot checks.</p>
+            <div class="module-step-switcher module-step-switcher-wide" role="tablist" aria-label="Billing workflow switcher">
+              <button type="button" class="module-step-tab is-active" data-step-group="billing" data-step-target="billing-panel-estimate" role="tab" aria-selected="true">1. Estimate</button>
+              <button type="button" class="module-step-tab ghost" data-step-group="billing" data-step-target="billing-panel-decision" role="tab" aria-selected="false">2. Decision</button>
+              <button type="button" class="module-step-tab ghost" data-step-group="billing" data-step-target="billing-panel-finalize" role="tab" aria-selected="false">3. Finalize</button>
+              <button type="button" class="module-step-tab ghost" data-step-group="billing" data-step-target="billing-panel-override" role="tab" aria-selected="false">4. Override</button>
+              <button type="button" class="module-step-tab ghost" data-step-group="billing" data-step-target="billing-panel-credit" role="tab" aria-selected="false">5. Credit Note</button>
+              <button type="button" class="module-step-tab ghost" data-step-group="billing" data-step-target="billing-panel-snapshot" role="tab" aria-selected="false">6. Snapshot</button>
+            </div>
 
-            <div class="workflow-grid">
-              <div>
-                <label>Case ID</label>
-                <input id="estimateCaseId" placeholder="case_id" />
+            <section class="case-flow-block step-panel step-panel-active" id="billing-panel-estimate" data-step-group="billing">
+              <h3>Estimate Context + Input</h3>
+              <div class="workflow-grid">
+                <div>
+                  <label>Case ID</label>
+                  <input id="estimateCaseId" placeholder="case_id" />
+                </div>
+                <div>
+                  <label>Case Item ID</label>
+                  <input id="estimateItemId" placeholder="case_item_id" />
+                </div>
+                <div>
+                  <label>Estimate ID</label>
+                  <input id="estimateId" placeholder="estimate_id" />
+                </div>
+                <div class="context-actions">
+                  <button id="syncContextBtn" class="ghost">Sync Context from Status Panel</button>
+                </div>
               </div>
-              <div>
-                <label>Case Item ID</label>
-                <input id="estimateItemId" placeholder="case_item_id" />
+
+              <div class="phase4-chips">
+                <span class="chip"><strong>Invoice State</strong> <span id="invoiceStateChip">NA</span></span>
+                <span class="chip"><strong>Locked</strong> <span id="lockedChip">NA</span></span>
+                <span class="chip"><strong>Overrides</strong> <span id="overrideChip">0</span></span>
+                <span class="chip"><strong>Decision</strong> <span id="decisionChip">NA</span></span>
               </div>
-              <div>
-                <label>Estimate ID</label>
-                <input id="estimateId" placeholder="estimate_id" />
+
+              <div class="workflow-grid">
+                <div><label>Labor (paise)</label><input id="laborPaise" value="12000" /></div>
+                <div><label>Spare (paise)</label><input id="sparePaise" value="8000" /></div>
+                <div><label>Other (paise)</label><input id="otherPaise" value="1000" /></div>
+                <div><label>Discount (paise)</label><input id="discountPaise" value="500" /></div>
+                <div>
+                  <label>GST Required</label>
+                  <select id="gstRequired"><option value="true" selected>true</option><option value="false">false</option></select>
+                </div>
+                <div>
+                  <label>Send For Decision</label>
+                  <select id="sendForDecision"><option value="true" selected>true</option><option value="false">false</option></select>
+                </div>
               </div>
-              <div class="context-actions">
-                <button id="syncContextBtn" class="ghost">Sync Context from Status Panel</button>
+              <div id="estimatePreview" class="preview-box"></div>
+              <button id="createEstimateBtn">Create Estimate</button>
+            </section>
+
+            <section class="case-flow-block step-panel" id="billing-panel-decision" data-step-group="billing">
+              <h3>Consent Decision</h3>
+              <div class="workflow-grid">
+                <div><label>Decision</label><select id="estimateDecision"><option>Approved</option><option>Rejected</option><option>Pending</option></select></div>
+                <div><label>Decision Channel</label><select id="decisionChannel"><option>call</option><option>in_person</option><option>whatsapp</option><option>sms</option></select></div>
+                <div><label>Decision By Name</label><input id="decisionByName" value="Ramesh" /></div>
+                <div><label>Decision By Phone</label><input id="decisionByPhone" value="9876500011" /></div>
+                <div><label>Consent Template Version</label><input id="consentTemplateVersion" value="estimate-v1" /></div>
+                <div><label>Consent Text Snapshot</label><input id="consentTextSnapshot" value="Approved on call" /></div>
               </div>
-            </div>
+              <button id="setEstimateDecisionBtn" class="accent">Set Estimate Decision</button>
+            </section>
 
-            <div class="phase4-chips">
-              <span class="chip"><strong>Invoice State</strong> <span id="invoiceStateChip">NA</span></span>
-              <span class="chip"><strong>Locked</strong> <span id="lockedChip">NA</span></span>
-              <span class="chip"><strong>Overrides</strong> <span id="overrideChip">0</span></span>
-              <span class="chip"><strong>Decision</strong> <span id="decisionChip">NA</span></span>
-            </div>
+            <section class="case-flow-block step-panel" id="billing-panel-finalize" data-step-group="billing">
+              <h3>Finalize + Lock</h3>
+              <label>Finalize Reason</label>
+              <input id="finalizeReason" value="Finalize from UI" />
+              <label class="toggle-row"><input id="confirmFinalize" type="checkbox" /> I confirm this will lock financial values.</label>
+              <button id="finalizeEstimateBtn" class="warn">Finalize Estimate</button>
+            </section>
 
-            <h3>Estimate Input</h3>
-            <div class="workflow-grid">
-              <div><label>Labor (paise)</label><input id="laborPaise" value="12000" /></div>
-              <div><label>Spare (paise)</label><input id="sparePaise" value="8000" /></div>
-              <div><label>Other (paise)</label><input id="otherPaise" value="1000" /></div>
-              <div><label>Discount (paise)</label><input id="discountPaise" value="500" /></div>
-              <div>
-                <label>GST Required</label>
-                <select id="gstRequired"><option value="true" selected>true</option><option value="false">false</option></select>
+            <section class="case-flow-block step-panel" id="billing-panel-override" data-step-group="billing">
+              <h3>Override (After Finalize)</h3>
+              <div class="workflow-grid">
+                <div><label>Override Labor (paise)</label><input id="overrideLaborPaise" value="13000" /></div>
+                <div><label>Override Spare (paise)</label><input id="overrideSparePaise" value="8000" /></div>
+                <div><label>Override Other (paise)</label><input id="overrideOtherPaise" value="1000" /></div>
+                <div><label>Override Discount (paise)</label><input id="overrideDiscountPaise" value="500" /></div>
               </div>
-              <div>
-                <label>Send For Decision</label>
-                <select id="sendForDecision"><option value="true" selected>true</option><option value="false">false</option></select>
+              <label>Override Reason</label>
+              <input id="overrideReason" value="UI override after finalize" />
+              <label class="toggle-row"><input id="confirmOverride" type="checkbox" /> I confirm this creates an audited financial override.</label>
+              <button id="overrideEstimateBtn" class="warn">Override Finalized Estimate</button>
+            </section>
+
+            <section class="case-flow-block step-panel" id="billing-panel-credit" data-step-group="billing">
+              <h3>Credit Note</h3>
+              <div class="workflow-grid">
+                <div><label>Credit Note Amount (paise)</label><input id="creditAmountPaise" value="3000" /></div>
+                <div><label>Credit Note Reason</label><input id="creditReason" value="Minor billing correction" /></div>
               </div>
-            </div>
-            <div id="estimatePreview" class="preview-box"></div>
-            <button id="createEstimateBtn">Create Estimate</button>
+              <label class="toggle-row"><input id="confirmCreditNote" type="checkbox" /> I confirm this posts a non-destructive correction entry.</label>
+              <button id="createCreditNoteBtn" class="warn">Create Credit Note</button>
+            </section>
 
-            <h3>Consent Decision</h3>
-            <div class="workflow-grid">
-              <div><label>Decision</label><select id="estimateDecision"><option>Approved</option><option>Rejected</option><option>Pending</option></select></div>
-              <div><label>Decision Channel</label><select id="decisionChannel"><option>call</option><option>in_person</option><option>whatsapp</option><option>sms</option></select></div>
-              <div><label>Decision By Name</label><input id="decisionByName" value="Ramesh" /></div>
-              <div><label>Decision By Phone</label><input id="decisionByPhone" value="9876500011" /></div>
-              <div><label>Consent Template Version</label><input id="consentTemplateVersion" value="estimate-v1" /></div>
-              <div><label>Consent Text Snapshot</label><input id="consentTextSnapshot" value="Approved on call" /></div>
-            </div>
-            <button id="setEstimateDecisionBtn" class="accent">Set Estimate Decision</button>
-
-            <h3>Finalize + Lock</h3>
-            <label>Finalize Reason</label>
-            <input id="finalizeReason" value="Finalize from UI" />
-            <label class="toggle-row"><input id="confirmFinalize" type="checkbox" /> I confirm this will lock financial values.</label>
-            <button id="finalizeEstimateBtn" class="warn">Finalize Estimate</button>
-
-            <h3>Override (After Finalize)</h3>
-            <div class="workflow-grid">
-              <div><label>Override Labor (paise)</label><input id="overrideLaborPaise" value="13000" /></div>
-              <div><label>Override Spare (paise)</label><input id="overrideSparePaise" value="8000" /></div>
-              <div><label>Override Other (paise)</label><input id="overrideOtherPaise" value="1000" /></div>
-              <div><label>Override Discount (paise)</label><input id="overrideDiscountPaise" value="500" /></div>
-            </div>
-            <label>Override Reason</label>
-            <input id="overrideReason" value="UI override after finalize" />
-            <label class="toggle-row"><input id="confirmOverride" type="checkbox" /> I confirm this creates an audited financial override.</label>
-            <button id="overrideEstimateBtn" class="warn">Override Finalized Estimate</button>
-
-            <h3>Credit Note</h3>
-            <div class="workflow-grid">
-              <div><label>Credit Note Amount (paise)</label><input id="creditAmountPaise" value="3000" /></div>
-              <div><label>Credit Note Reason</label><input id="creditReason" value="Minor billing correction" /></div>
-            </div>
-            <label class="toggle-row"><input id="confirmCreditNote" type="checkbox" /> I confirm this posts a non-destructive correction entry.</label>
-            <button id="createCreditNoteBtn" class="warn">Create Credit Note</button>
-
-            <div class="row">
-              <button id="getEstimateBtn" class="ghost">Get Estimate Snapshot</button>
-              <button id="listCaseEstimatesBtn" class="ghost">List Case Estimates</button>
-            </div>
-            <button id="loadLatestEstimateBtn" class="ghost">Use Latest Estimate From Case</button>
-            <pre id="phase4Highlights"></pre>
-            <pre id="phase4Result"></pre>
+            <section class="case-flow-block step-panel" id="billing-panel-snapshot" data-step-group="billing">
+              <h3>Snapshot + Verify</h3>
+              <div class="row">
+                <button id="getEstimateBtn" class="ghost">Get Estimate Snapshot</button>
+                <button id="listCaseEstimatesBtn" class="ghost">List Case Estimates</button>
+              </div>
+              <button id="loadLatestEstimateBtn" class="ghost">Use Latest Estimate From Case</button>
+              <pre id="phase4Highlights"></pre>
+              <pre id="phase4Result"></pre>
+            </section>
           </details>
         </section>
 

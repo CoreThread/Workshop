@@ -1,5 +1,77 @@
 # Changelog
 
+## 2026-03-11 - Removed workspace-switcher section
+
+### Changed
+- Removed `workspace-switcher` section from `frontend/index.html` to reduce top-level UI clutter.
+- Removed workspace tab behavior from `frontend/app.js` (lane tab references and tab state handling).
+- Removed related CSS from `frontend/styles.css` (`.workspace-switcher`, `.workspace-tabs`, `.lane-tab`).
+- Lane navigation now runs through `Quick Navigator` and quick actions only.
+
+### Validation
+- Frontend diagnostics: no errors in `frontend/index.html`, `frontend/app.js`, `frontend/styles.css`.
+
+## 2026-03-11 - Lane 1 guided-step UX reorganization
+
+### Changed
+- Reorganized Core Ops quick entry points in `frontend/index.html`:
+  - added `Search Case` quick action button for direct case retrieval flow
+  - restructured `Quick Navigator` into logical task sequence (create/search/status/follow-up/daily close/estimate/finalize/archive restore)
+- Converted Lane 1 modules into guided substep flows (one substep visible at a time):
+  - `Follow-up + Daily Close` split into `Queue`, `Note Update`, `Daily Close`
+  - `Backup + Archive Admin` split into `DB Usage`, `Trigger Check`, `Index + Restore`
+  - `Estimate + Billing Lock` split into `Estimate`, `Decision`, `Finalize`, `Override`, `Credit Note`, `Snapshot`
+- Added reusable step-panel interaction logic in `frontend/app.js`:
+  - generic `data-step-group` + `data-step-target` routing
+  - jump-links now open the correct lane/module/substep before scroll
+  - quick actions route users to correct operational substep directly
+
+### Validation
+- Frontend diagnostics: no errors in `frontend/index.html`, `frontend/app.js`, `frontend/styles.css`.
+
+## 2026-03-11 - Lane 1 UX declutter (focused Core Ops flow)
+
+### Changed
+- Simplified Phase 2 `Case Intake + Status` in `frontend/index.html` into step-wise internal panels:
+  - `1. Create New Case`
+  - `2. Search Existing Cases`
+  - `3. Case Status Update`
+- Added panel switching behavior in `frontend/app.js`:
+  - case workflow tabs now show one panel at a time to reduce cognitive load
+  - selecting a case from search auto-switches to status panel
+  - successful case creation auto-switches to status panel
+- Reduced Core Ops visual overload by making Lane 1 modules act as a focused accordion in `frontend/app.js`:
+  - only one of `Case`, `Follow-up`, `Archive`, `Billing` stays open at a time
+  - jump links and quick actions now open and focus the relevant module first
+- Added supporting styles in `frontend/styles.css` for case workflow switcher tabs and single-panel display.
+
+### Validation
+- Frontend diagnostics: no errors in `frontend/index.html`, `frontend/app.js`, `frontend/styles.css`.
+
+## 2026-03-11 - Multi-item case intake + split create/search UI
+
+### Changed
+- Reworked `Case Intake + Status` in `frontend/index.html` into three clearer blocks:
+  - `Create New Case`
+  - `Search Existing Cases`
+  - `Case Status Update`
+- Added dynamic multi-item case intake UI in `frontend/app.js` + `frontend/styles.css`:
+  - `Add Item` / `Reset Items`
+  - per-item labeling (`Item A`, `Item B`, `Item C`, ...)
+  - per-item category dropdown options: `fan`, `exhaust`, `motor`, `submersable`
+  - per-item reported issue input
+- Upgraded backend case creation route in `backend/src/index.js`:
+  - `POST /v1/cases` now accepts both legacy `item` and new `items[]`
+  - creates all case items in one case-create request with sequential `line_no`
+  - sets `cases.total_units_received` to `items.length`
+  - writes status-history rows for each created item
+  - response now includes `data.case_items[]` and `data.total_units_received`
+- Updated frontend create flow to submit full `items[]` payload and show created item count.
+
+### Validation
+- Frontend diagnostics: no errors in `frontend/index.html`, `frontend/app.js`, `frontend/styles.css`.
+- Backend diagnostics: no errors in `backend/src/index.js`.
+
 ## 2026-03-10 - App-style workspace lanes (non-long-page UX)
 
 ### Changed
