@@ -33,14 +33,23 @@ const el = {
   laneAnalytics: document.getElementById("lane-analytics"),
   laneHr: document.getElementById("lane-hr"),
   moduleCase: document.getElementById("module-case"),
+  moduleCaseSummary: document.getElementById("moduleCaseSummary"),
   moduleFollowup: document.getElementById("module-followup"),
   moduleBilling: document.getElementById("module-billing"),
   moduleArchive: document.getElementById("module-archive"),
+  caseWorkflowChrome: document.getElementById("caseWorkflowChrome"),
+  caseWorkflowHint: document.getElementById("caseWorkflowHint"),
+  caseFlowSwitcher: document.getElementById("caseFlowSwitcher"),
   quickCreateCaseBtn: document.getElementById("quickCreateCaseBtn"),
   quickSearchCaseBtn: document.getElementById("quickSearchCaseBtn"),
+  quickOpenStatusBtn: document.getElementById("quickOpenStatusBtn"),
   quickLoadFollowupsBtn: document.getElementById("quickLoadFollowupsBtn"),
   quickRunDailyCloseBtn: document.getElementById("quickRunDailyCloseBtn"),
   quickLoadArchiveIndexBtn: document.getElementById("quickLoadArchiveIndexBtn"),
+  quickBillingBtn: document.getElementById("quickBillingBtn"),
+  quickInventoryBtn: document.getElementById("quickInventoryBtn"),
+  quickAnalyticsBtn: document.getElementById("quickAnalyticsBtn"),
+  quickHrBtn: document.getElementById("quickHrBtn"),
   quickActionsHint: document.getElementById("quickActionsHint"),
   caseNo: document.getElementById("caseNo"),
   customerName: document.getElementById("customerName"),
@@ -55,13 +64,16 @@ const el = {
   searchBtn: document.getElementById("searchBtn"),
   searchResults: document.getElementById("searchResults"),
   statusCaseId: document.getElementById("statusCaseId"),
+  loadCaseItemsBtn: document.getElementById("loadCaseItemsBtn"),
+  statusCaseNo: document.getElementById("statusCaseNo"),
+  statusHeaderStatus: document.getElementById("statusHeaderStatus"),
   statusItemId: document.getElementById("statusItemId"),
-  toStatus: document.getElementById("toStatus"),
-  statusNote: document.getElementById("statusNote"),
-  updateStatusBtn: document.getElementById("updateStatusBtn"),
+  statusProgressBar: document.getElementById("statusProgressBar"),
+  statusProgressLabel: document.getElementById("statusProgressLabel"),
   statusResult: document.getElementById("statusResult"),
+  caseStatusItemsBoard: document.getElementById("caseStatusItemsBoard"),
   historyBtn: document.getElementById("historyBtn"),
-  history: document.getElementById("history"),
+  historyTimeline: document.getElementById("historyTimeline"),
   followupQueue: document.getElementById("followupQueue"),
   followupStatus: document.getElementById("followupStatus"),
   loadFollowupsBtn: document.getElementById("loadFollowupsBtn"),
@@ -236,7 +248,8 @@ const phase5State = {
 const appState = {
   currentRole: "",
   compactMobileApplied: false,
-  activeLane: "lane-primary"
+  activeLane: "lane-primary",
+  activeCasePanel: "case-panel-create"
 };
 
 const caseItemCategoryOptions = ["fan", "exhaust", "motor", "submersable"];
@@ -244,10 +257,100 @@ const caseIntakeState = {
   items: []
 };
 
+const caseWorkflowState = {
+  caseId: "",
+  caseNo: "",
+  headerStatus: "",
+  items: [],
+  previewToStatus: "Diagnosis"
+};
+
+const CASE_PANEL_ORDER = ["case-panel-create", "case-panel-status"];
+const CASE_ITEM_TERMINAL_STATUSES = new Set(["Delivered", "Cancelled"]);
+const CASE_STATUS_SEQUENCE = ["Received", "Diagnosis", "WaitingApproval", "ApprovedForRepair", "InRepair", "Ready", "Delivered", "Cancelled"];
+
 const MOBILE_BREAKPOINT = 820;
 
 function setText(node, text) {
   node.textContent = text;
+}
+
+function digitsOnly(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function isReasonablePhone(value) {
+  const digits = digitsOnly(value);
+  return digits.length >= 10 && digits.length <= 15;
+}
+
+function renderInlineMessage(message, tone = "") {
+  const classes = ["hint", "form-feedback"];
+  if (tone) classes.push(tone);
+  return `<p class="${classes.join(" ")}">${message}</p>`;
+}
+
+function setFeedback(node, message, tone = "info") {
+  if (!node) return;
+  node.textContent = message || "";
+  node.classList.remove("is-error", "is-success");
+  if (tone === "error") node.classList.add("is-error");
+  if (tone === "success") node.classList.add("is-success");
+}
+
+async function withButtonBusy(button, label, task) {
+  if (!(button instanceof HTMLButtonElement)) return task();
+  if (button.dataset.busy === "true") return;
+
+  const originalHtml = button.innerHTML;
+  const originalDisabled = button.disabled;
+  button.disabled = true;
+  button.dataset.busy = "true";
+  button.classList.add("is-loading");
+  button.innerHTML = `<span class="btn-loader" aria-hidden="true"></span><span>${label}</span>`;
+
+  try {
+    return await task();
+  } finally {
+    button.innerHTML = originalHtml;
+    button.disabled = originalDisabled;
+    button.dataset.busy = "false";
+    button.classList.remove("is-loading");
+  }
+}
+
+function formatUiError(action, rawMessage) {
+  const message = String(rawMessage || "").trim();
+  const msg = message.toLowerCase();
+
+  if (msg.includes("case_no") && msg.includes("required")) {
+    return "Enter a valid Case No (example: AJ-101).";
+  }
+  if (msg.includes("customer.name") || msg.includes("customer.phone")) {
+    return "Enter customer name and customer phone before submitting.";
+  }
+  if (msg.includes("at least one item") || msg.includes("item_category") || msg.includes("reported_issue")) {
+    return "Add at least one item with category and reported issue.";
+  }
+  if (msg.includes("invalid status transition")) {
+    return "This status change is not allowed from current status. Choose a valid next status.";
+  }
+  if (msg.includes("not found")) {
+    return "Requested case or item was not found. Refresh case details and try again.";
+  }
+  if (msg.includes("query timed out") || msg.includes("timeout")) {
+    return "Request timed out. Please retry.";
+  }
+  if (msg.includes("network") || msg.includes("failed to fetch") || msg.includes("cannot reach")) {
+    return "Unable to connect to API. Check API base and internet, then retry.";
+  }
+
+  if (action === "search_cases") return message || "Unable to search cases right now.";
+  if (action === "create_case") return message || "Unable to create case. Please review inputs and retry.";
+  if (action === "load_case_context") return message || "Unable to load case details. Verify Case ID and retry.";
+  if (action === "update_case_status") return message || "Unable to update case item status.";
+
+  return message || "Something went wrong. Please retry.";
 }
 
 function normalizeBase(value) {
@@ -286,7 +389,7 @@ function applyLoginGate() {
 
   if (!el.loginGateHint) return;
   if (loggedIn) {
-    setText(el.loginGateHint, "Workspace unlocked. Use Quick Navigator to move between lanes.");
+    setText(el.loginGateHint, "Workspace unlocked. Use Quick Actions to move between work areas.");
   } else {
     setText(el.loginGateHint, "Login required to open operational lanes.");
   }
@@ -318,6 +421,10 @@ function wireButtonClickEffects() {
     button.classList.remove("click-ripple");
     void button.offsetWidth;
     button.classList.add("click-ripple");
+    button.classList.remove("button-clicked");
+    void button.offsetWidth;
+    button.classList.add("button-clicked");
+    window.setTimeout(() => button.classList.remove("button-clicked"), 240);
   });
 }
 
@@ -372,6 +479,7 @@ function setPrimaryModuleActive(moduleId, options = {}) {
   const target = modules.find((node) => node.id === moduleId) || modules[0];
   modules.forEach((node) => {
     node.open = node.id === target.id;
+    node.classList.toggle("primary-module-hidden", node.id !== target.id);
   });
 
   if (scroll) {
@@ -405,22 +513,245 @@ function casePanels() {
   return Array.from(document.querySelectorAll(".case-panel"));
 }
 
+function getCaseItemCompletion(items = []) {
+  const total = items.length;
+  const completed = items.filter((row) => CASE_ITEM_TERMINAL_STATUSES.has(row.item_status)).length;
+  return {
+    total,
+    completed,
+    inProgress: Math.max(0, total - completed)
+  };
+}
+
+function getStatusBucket(status) {
+  if (["Delivered", "Cancelled"].includes(status)) return "Completed";
+  if (status === "Ready") return "Ready";
+  if (status === "InRepair") return "In Repair";
+  return "Pending";
+}
+
+function renderStatusProgressBar(toStatus = "") {
+  if (!el.statusProgressBar) return;
+  const target = CASE_STATUS_SEQUENCE.includes(toStatus) ? toStatus : caseWorkflowState.previewToStatus;
+  const targetIndex = Math.max(0, CASE_STATUS_SEQUENCE.indexOf(target));
+
+  el.statusProgressBar.innerHTML = CASE_STATUS_SEQUENCE
+    .map((status, index) => {
+      const classes = ["status-step"];
+      if (index <= targetIndex) classes.push("done");
+      if (status === target) classes.push("target");
+      return `<div class="${classes.join(" ")}">${status}</div>`;
+    })
+    .join("");
+
+  const completion = getCaseItemCompletion(caseWorkflowState.items);
+  if (el.statusProgressLabel) {
+    const caseNo = caseWorkflowState.caseNo || "Not selected";
+    el.statusProgressLabel.textContent = `Case: ${caseNo} | Header: ${caseWorkflowState.headerStatus || "NA"} | To Status: ${target} | Completed Items: ${completion.completed}/${completion.total}`;
+  }
+}
+
+function renderCaseStatusItemsBoard() {
+  if (!el.caseStatusItemsBoard) return;
+  const rows = caseWorkflowState.items || [];
+  if (!rows.length) {
+    el.caseStatusItemsBoard.innerHTML = "<p class='hint'>Load a case to view item-wise status updates.</p>";
+    renderStatusProgressBar(caseWorkflowState.previewToStatus);
+    return;
+  }
+
+  const buckets = ["Pending", "In Repair", "Ready", "Completed"];
+  const byBucket = {
+    Pending: [],
+    "In Repair": [],
+    Ready: [],
+    Completed: []
+  };
+
+  rows.forEach((row) => {
+    byBucket[getStatusBucket(row.item_status)].push(row);
+  });
+
+  const statusOptions = CASE_STATUS_SEQUENCE
+    .filter((status) => status !== "Received")
+    .map((status) => `<option value="${status}">${status}</option>`)
+    .join("");
+
+  el.caseStatusItemsBoard.innerHTML = buckets
+    .map((bucket) => {
+      const bucketRows = byBucket[bucket] || [];
+      if (!bucketRows.length) return "";
+
+      const tableRows = bucketRows
+        .map((row) => {
+          return `
+            <tr data-status-item-id="${row.id}">
+                <td data-label="Item">${row.line_no || "-"}</td>
+                <td data-label="Category">${row.item_category || "NA"}</td>
+                <td data-label="Issue">${row.reported_issue || "NA"}</td>
+                <td data-label="Current">${row.item_status || "NA"}</td>
+                <td data-label="To Status">
+                <select class="row-to-status" data-status-item-id="${row.id}">
+                  ${statusOptions}
+                </select>
+              </td>
+                <td data-label="Note">
+                <input class="row-status-note" data-status-item-id="${row.id}" placeholder="optional note" />
+              </td>
+                <td data-label="Action">
+                <button type="button" class="accent row-update-item-status" data-status-item-id="${row.id}">Update</button>
+              </td>
+            </tr>
+          `;
+        })
+        .join("");
+
+      return `
+        <section class="case-status-group">
+          <h4>${bucket}</h4>
+          <div class="case-status-table-wrap">
+            <table class="case-status-table">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Category</th>
+                  <th>Issue</th>
+                  <th>Current</th>
+                  <th>To Status</th>
+                  <th>Note</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${tableRows}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      `;
+    })
+    .join("");
+
+  renderStatusProgressBar(caseWorkflowState.previewToStatus);
+}
+
+function pickPreferredCaseItem(rows = [], preferredItemId = "") {
+  if (!rows.length) return "";
+  if (preferredItemId && rows.some((row) => row.id === preferredItemId)) {
+    return preferredItemId;
+  }
+  const firstInProgress = rows.find((row) => !CASE_ITEM_TERMINAL_STATUSES.has(row.item_status));
+  return firstInProgress?.id || rows[0].id;
+}
+
+function applySelectedCaseItem(itemId) {
+  if (!itemId) return;
+  el.statusItemId.value = itemId;
+  syncOperationalContextFromCase();
+}
+
+async function loadCaseWorkflowContext(caseId, options = {}) {
+  const { preferredItemId = "", silent = false } = options;
+  const normalizedCaseId = String(caseId || "").trim();
+  if (!normalizedCaseId) {
+    if (!silent) setText(el.statusResult, "Enter Case ID first, then refresh case details.");
+    return;
+  }
+
+  try {
+    const [caseResult, itemResult] = await Promise.all([
+      api(`/v1/cases/${normalizedCaseId}`, { method: "GET" }),
+      api(`/v1/cases/${normalizedCaseId}/items`, { method: "GET" })
+    ]);
+
+    const rows = Array.isArray(itemResult?.data) ? itemResult.data : [];
+    caseWorkflowState.caseId = normalizedCaseId;
+    caseWorkflowState.caseNo = caseResult?.data?.case_no || "";
+    caseWorkflowState.headerStatus = caseResult?.data?.header_status || "";
+    caseWorkflowState.items = rows;
+
+    el.statusCaseId.value = normalizedCaseId;
+    if (el.statusCaseNo) el.statusCaseNo.value = caseWorkflowState.caseNo || "";
+    if (el.statusHeaderStatus) el.statusHeaderStatus.value = caseWorkflowState.headerStatus || "";
+
+    const itemIdToUse = pickPreferredCaseItem(rows, preferredItemId || el.statusItemId.value.trim());
+    if (itemIdToUse) {
+      applySelectedCaseItem(itemIdToUse);
+    } else {
+      el.statusItemId.value = "";
+      syncOperationalContextFromCase();
+    }
+
+    renderCaseStatusItemsBoard();
+
+    if (!silent) {
+      setText(el.statusResult, `Case loaded: ${caseWorkflowState.caseNo || normalizedCaseId} with ${rows.length} item(s)`);
+    }
+  } catch (error) {
+    if (!silent) {
+      setText(el.statusResult, formatUiError("load_case_context", error.message));
+    }
+  }
+}
+
+function resetCaseWorkflowState() {
+  caseWorkflowState.caseId = "";
+  caseWorkflowState.caseNo = "";
+  caseWorkflowState.headerStatus = "";
+  caseWorkflowState.items = [];
+  if (el.statusCaseNo) el.statusCaseNo.value = "";
+  if (el.statusHeaderStatus) el.statusHeaderStatus.value = "";
+  el.statusItemId.value = "";
+  if (el.historyTimeline) el.historyTimeline.innerHTML = "";
+  renderCaseStatusItemsBoard();
+}
+
+function updateCaseModuleChrome(panelId) {
+  const isCreatePanel = panelId === "case-panel-create";
+  setHidden(el.caseWorkflowChrome, !isCreatePanel);
+
+  if (el.moduleCaseSummary) {
+    if (panelId === "case-panel-search") {
+      el.moduleCaseSummary.textContent = "Search Existing Cases";
+    } else if (panelId === "case-panel-status") {
+      el.moduleCaseSummary.textContent = "Case Status Workspace";
+    } else {
+      el.moduleCaseSummary.textContent = "Case Intake + Status (Phase 2)";
+    }
+  }
+}
+
 function setActiveCasePanel(panelId) {
   const tabs = casePanelTabs();
   const panels = casePanels();
-  if (!tabs.length || !panels.length) return;
+  if (!panels.length) return;
 
   const targetPanel = panels.find((panel) => panel.id === panelId) || panels[0];
   panels.forEach((panel) => {
     panel.classList.toggle("case-panel-active", panel.id === targetPanel.id);
   });
 
+  updateCaseModuleChrome(targetPanel.id);
+
+  if (!tabs.length) return;
+
+  const effectiveStepPanel = targetPanel.id === "case-panel-search" ? "case-panel-create" : targetPanel.id;
+  appState.activeCasePanel = effectiveStepPanel;
+  const activeIndex = CASE_PANEL_ORDER.indexOf(effectiveStepPanel);
+
   tabs.forEach((tab) => {
-    const active = tab.dataset.casePanelTarget === targetPanel.id;
+    const active = tab.dataset.casePanelTarget === effectiveStepPanel;
+    const tabPanelId = tab.dataset.casePanelTarget || "";
+    const tabIndex = CASE_PANEL_ORDER.indexOf(tabPanelId);
+    const isComplete = tabIndex >= 0 && activeIndex >= 0 && tabIndex < activeIndex;
     tab.classList.toggle("is-active", active);
-    tab.classList.toggle("ghost", !active);
+    tab.classList.toggle("is-complete", isComplete);
     tab.setAttribute("aria-selected", active ? "true" : "false");
   });
+
+  if (targetPanel.id === "case-panel-status") {
+    renderStatusProgressBar(caseWorkflowState.previewToStatus);
+  }
 }
 
 function wireCaseFlowNavigation() {
@@ -511,9 +842,12 @@ function applyRoleView() {
     setHidden(el.laneAnalytics, false);
     setHidden(el.moduleBilling, false);
     setHidden(el.moduleArchive, false);
+    setHidden(el.quickHrBtn, false);
+    setHidden(el.quickAnalyticsBtn, false);
+    setHidden(el.quickBillingBtn, false);
     setDisabled(el.quickLoadArchiveIndexBtn, false);
     if (el.quickActionsHint) {
-      setText(el.quickActionsHint, "Login to enforce role-aware workspace visibility.");
+      setText(el.quickActionsHint, "Use Quick Actions as the main navigation once you log in. Role visibility is applied after login.");
     }
     applyLoginGate();
     syncLaneWithRoleVisibility();
@@ -526,8 +860,11 @@ function applyRoleView() {
     setHidden(el.laneAnalytics, false);
     setHidden(el.moduleBilling, false);
     setHidden(el.moduleArchive, false);
+    setHidden(el.quickHrBtn, false);
+    setHidden(el.quickAnalyticsBtn, false);
+    setHidden(el.quickBillingBtn, false);
     setDisabled(el.quickLoadArchiveIndexBtn, false);
-    if (el.quickActionsHint) setText(el.quickActionsHint, "Admin mode: all lanes available.");
+    if (el.quickActionsHint) setText(el.quickActionsHint, "Admin mode: all quick actions and lanes are available.");
     applyLoginGate();
     syncLaneWithRoleVisibility();
     syncPrimaryModuleWithRoleVisibility();
@@ -539,8 +876,11 @@ function applyRoleView() {
     setHidden(el.laneAnalytics, false);
     setHidden(el.moduleBilling, false);
     setHidden(el.moduleArchive, false);
+    setHidden(el.quickHrBtn, true);
+    setHidden(el.quickAnalyticsBtn, false);
+    setHidden(el.quickBillingBtn, false);
     setDisabled(el.quickLoadArchiveIndexBtn, false);
-    if (el.quickActionsHint) setText(el.quickActionsHint, "IT mode: HR lane hidden.");
+    if (el.quickActionsHint) setText(el.quickActionsHint, "IT mode: HR is hidden. Core, archive, billing, inventory, and analytics remain available.");
     applyLoginGate();
     syncLaneWithRoleVisibility();
     syncPrimaryModuleWithRoleVisibility();
@@ -552,9 +892,12 @@ function applyRoleView() {
     setHidden(el.laneAnalytics, true);
     setHidden(el.moduleBilling, true);
     setHidden(el.moduleArchive, true);
+    setHidden(el.quickHrBtn, true);
+    setHidden(el.quickAnalyticsBtn, true);
+    setHidden(el.quickBillingBtn, true);
     setDisabled(el.quickLoadArchiveIndexBtn, true, "Archive index is available for Admin/IT only.");
     if (el.quickActionsHint) {
-      setText(el.quickActionsHint, "Staff mode: finance/archive/analytics/hr sections are hidden.");
+      setText(el.quickActionsHint, "Staff mode: Quick Actions stay focused on case flow, follow-ups, daily close, and inventory.");
     }
     applyLoginGate();
     syncLaneWithRoleVisibility();
@@ -1048,7 +1391,7 @@ async function loadMe() {
     const result = await api("/v1/auth/me", { method: "GET" });
     appState.currentRole = result?.data?.role || "";
     setText(el.whoami, `Logged in: ${result.data.full_name} (${result.data.role})`);
-    if (el.whoamiTop) setText(el.whoamiTop, `${result.data.full_name} (${result.data.role})`);
+    if (el.whoamiTop) setText(el.whoamiTop, `Hi ${result.data.role}`);
     applyRoleView();
   } catch (error) {
     storage.token = "";
@@ -1087,12 +1430,18 @@ el.quickSearchCaseBtn?.addEventListener("click", () => {
   document.getElementById("module-case")?.scrollIntoView({ behavior: "smooth", block: "start" });
 });
 
+el.quickOpenStatusBtn?.addEventListener("click", () => {
+  activateLane("lane-primary", { scroll: false });
+  setPrimaryModuleActive("module-case", { scroll: false });
+  setActiveCasePanel("case-panel-status");
+  document.getElementById("module-case")?.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
 el.quickLoadFollowupsBtn?.addEventListener("click", () => {
   activateLane("lane-primary", { scroll: false });
   setPrimaryModuleActive("module-followup", { scroll: false });
   setActiveStepPanel("followup", "followup-panel-queue");
   document.getElementById("module-followup")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  el.loadFollowupsBtn?.click();
 });
 
 el.quickRunDailyCloseBtn?.addEventListener("click", () => {
@@ -1100,7 +1449,6 @@ el.quickRunDailyCloseBtn?.addEventListener("click", () => {
   setPrimaryModuleActive("module-followup", { scroll: false });
   setActiveStepPanel("followup", "followup-panel-close");
   document.getElementById("module-followup")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  el.runDailyCloseBtn?.click();
 });
 
 el.quickLoadArchiveIndexBtn?.addEventListener("click", () => {
@@ -1109,7 +1457,31 @@ el.quickLoadArchiveIndexBtn?.addEventListener("click", () => {
   setPrimaryModuleActive("module-archive", { scroll: false });
   setActiveStepPanel("archive", "archive-panel-index");
   document.getElementById("module-archive")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  el.loadArchiveIndexBtn?.click();
+});
+
+el.quickBillingBtn?.addEventListener("click", () => {
+  if (el.quickBillingBtn.classList.contains("is-hidden")) return;
+  activateLane("lane-primary", { scroll: false });
+  setPrimaryModuleActive("module-billing", { scroll: false });
+  setActiveStepPanel("billing", "billing-panel-estimate");
+  document.getElementById("module-billing")?.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+el.quickInventoryBtn?.addEventListener("click", () => {
+  activateLane("lane-inventory", { scroll: false });
+  document.getElementById("lane-inventory")?.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+el.quickAnalyticsBtn?.addEventListener("click", () => {
+  if (el.quickAnalyticsBtn.classList.contains("is-hidden")) return;
+  activateLane("lane-analytics", { scroll: false });
+  document.getElementById("lane-analytics")?.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+el.quickHrBtn?.addEventListener("click", () => {
+  if (el.quickHrBtn.classList.contains("is-hidden")) return;
+  activateLane("lane-hr", { scroll: false });
+  document.getElementById("lane-hr")?.scrollIntoView({ behavior: "smooth", block: "start" });
 });
 
 el.syncContextBtn?.addEventListener("click", () => {
@@ -1176,8 +1548,12 @@ el.runPhase5SmokePayloadBtn?.addEventListener("click", () => {
   el.caseNo.value = generated.payloads.create_case.case_no;
   el.customerName.value = generated.payloads.create_case.customer.name;
   el.customerPhone.value = generated.payloads.create_case.customer.phone;
-  el.itemCategory.value = generated.payloads.create_case.item.item_category;
-  el.reportedIssue.value = generated.payloads.create_case.item.reported_issue;
+  caseIntakeState.items = [{
+    category: generated.payloads.create_case.item.item_category,
+    reportedIssue: generated.payloads.create_case.item.reported_issue
+  }];
+  renderCaseItemsUI();
+  setActiveCasePanel("case-panel-create");
 
   el.inventorySku.value = generated.payloads.create_inventory_item.sku;
   el.inventoryName.value = generated.payloads.create_inventory_item.item_name;
@@ -1215,6 +1591,7 @@ function handleLogout() {
   appState.currentRole = "";
   setText(el.whoami, "Logged out");
   if (el.whoamiTop) setText(el.whoamiTop, "Guest");
+  resetCaseWorkflowState();
   clearAnalyticsOverview();
   applyRoleView();
 }
@@ -1321,21 +1698,129 @@ el.loadHrSummaryBtn?.addEventListener("click", async () => {
   }
 });
 
-el.createCaseBtn.addEventListener("click", async () => {
+el.loadCaseItemsBtn?.addEventListener("click", async () => {
+  await withButtonBusy(el.loadCaseItemsBtn, "Loading...", async () => {
+    await loadCaseWorkflowContext(el.statusCaseId.value.trim(), { preferredItemId: el.statusItemId.value.trim() });
+  });
+});
+
+el.statusCaseId?.addEventListener("change", () => {
+  const caseId = el.statusCaseId.value.trim();
+  if (!caseId) {
+    resetCaseWorkflowState();
+    return;
+  }
+  caseWorkflowState.caseId = caseId;
+  if (el.statusCaseNo) el.statusCaseNo.value = "";
+  if (el.statusHeaderStatus) el.statusHeaderStatus.value = "";
+  renderStatusProgressBar(caseWorkflowState.previewToStatus);
+});
+
+el.caseStatusItemsBoard?.addEventListener("change", (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+  if (!target.classList.contains("row-to-status")) return;
+
+  const statusValue = (target.value || "").trim();
+  if (!statusValue) return;
+  caseWorkflowState.previewToStatus = statusValue;
+  renderStatusProgressBar(statusValue);
+});
+
+el.caseStatusItemsBoard?.addEventListener("click", async (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+  if (!target.classList.contains("row-update-item-status")) return;
+
+  const itemId = target.getAttribute("data-status-item-id") || "";
+  const caseId = el.statusCaseId.value.trim();
+  if (!caseId || !itemId) {
+    setFeedback(el.statusResult, "Enter a valid Case ID and load latest case details before updating status.", "error");
+    return;
+  }
+
+  const row = target.closest("tr");
+  if (!(row instanceof HTMLTableRowElement)) return;
+
+  const toStatusInput = row.querySelector(".row-to-status");
+  const noteInput = row.querySelector(".row-status-note");
+  const toStatus = toStatusInput instanceof HTMLSelectElement ? toStatusInput.value.trim() : "";
+  const note = noteInput instanceof HTMLInputElement ? noteInput.value.trim() : "";
+  const currentStatus = row.children[3]?.textContent?.trim() || "";
+
+  if (!toStatus) {
+    setFeedback(el.statusResult, "Select a target status before updating this item.", "error");
+    return;
+  }
+  if (currentStatus && currentStatus === toStatus) {
+    setFeedback(el.statusResult, "Select the next status, not the current one.", "error");
+    return;
+  }
+
   try {
+    const result = await withButtonBusy(target, "Updating...", async () => api(`/v1/cases/${caseId}/items/${itemId}/status`, {
+      method: "POST",
+      body: JSON.stringify({
+        to_status: toStatus,
+        note
+      })
+    }));
+
+    caseWorkflowState.previewToStatus = toStatus;
+    const rowsBefore = caseWorkflowState.items || [];
+    const nextInProgress = rowsBefore.find((rowItem) => rowItem.id !== itemId && !CASE_ITEM_TERMINAL_STATUSES.has(rowItem.item_status));
+    const preferredNext = CASE_ITEM_TERMINAL_STATUSES.has(toStatus) ? (nextInProgress?.id || itemId) : itemId;
+
+    el.statusItemId.value = preferredNext;
+    syncOperationalContextFromCase();
+
+    await loadCaseWorkflowContext(caseId, {
+      preferredItemId: preferredNext,
+      silent: true
+    });
+
+    setFeedback(el.statusResult, `Updated item ${itemId}: ${result.data.from_status} -> ${result.data.to_status} | header=${result.data.header_status}`, "success");
+  } catch (error) {
+    setFeedback(el.statusResult, formatUiError("update_case_status", error.message), "error");
+  }
+});
+
+el.createCaseBtn.addEventListener("click", async () => {
+  await withButtonBusy(el.createCaseBtn, "Creating...", async () => {
+    const caseNo = el.caseNo.value.trim();
+    const customerName = el.customerName.value.trim();
+    const customerPhone = el.customerPhone.value.trim();
+
+    if (!caseNo) {
+      setFeedback(el.createResult, "Enter the offline Case No before creating a case.", "error");
+      return;
+    }
+    if (!customerName) {
+      setFeedback(el.createResult, "Enter the customer name before creating a case.", "error");
+      return;
+    }
+    if (!customerPhone) {
+      setFeedback(el.createResult, "Enter the customer phone before creating a case.", "error");
+      return;
+    }
+    if (!isReasonablePhone(customerPhone)) {
+      setFeedback(el.createResult, "Enter a valid customer phone with 10 to 15 digits.", "error");
+      return;
+    }
+
     const items = getNormalizedCaseItems();
     if (!items.length) {
-      setText(el.createResult, "Create failed: add at least one valid item with category + reported issue");
+      setFeedback(el.createResult, "Add at least one valid item with category and reported issue.", "error");
       return;
     }
 
     const result = await api("/v1/cases", {
       method: "POST",
       body: JSON.stringify({
-        case_no: el.caseNo.value.trim(),
+        case_no: caseNo,
         customer: {
-          name: el.customerName.value.trim(),
-          phone: el.customerPhone.value.trim()
+          name: customerName,
+          phone: customerPhone
         },
         items
       })
@@ -1343,27 +1828,44 @@ el.createCaseBtn.addEventListener("click", async () => {
 
     const createdItems = Array.isArray(result?.data?.case_items) ? result.data.case_items : [];
     const createdCount = createdItems.length || (result?.data?.total_units_received ?? items.length);
-    setText(el.createResult, `Created: case_id=${result.data.case_id}, items=${createdCount}, primary_item_id=${result.data.case_item_id}`);
+    setFeedback(el.createResult, `Case created successfully. Case ID: ${result.data.case_id} | Items: ${createdCount}`, "success");
     el.statusCaseId.value = result.data.case_id;
     el.statusItemId.value = result.data.case_item_id;
     syncOperationalContextFromCase();
     setActiveCasePanel("case-panel-status");
-  } catch (error) {
-    setText(el.createResult, `Create failed: ${error.message}`);
-  }
+    await loadCaseWorkflowContext(result.data.case_id, {
+      preferredItemId: result.data.case_item_id,
+      silent: true
+    });
+    setFeedback(el.statusResult, `Case created and opened in Status Update. Start with item ${result.data.case_item_id}.`, "success");
+  }).catch((error) => {
+    setFeedback(el.createResult, formatUiError("create_case", error.message), "error");
+  });
 });
 
 el.searchBtn.addEventListener("click", async () => {
-  try {
+  await withButtonBusy(el.searchBtn, "Searching...", async () => {
+    const caseNo = el.searchCaseNo.value.trim();
+    const phone = el.searchPhone.value.trim();
+
+    if (!caseNo && !phone) {
+      el.searchResults.innerHTML = renderInlineMessage("Enter a Case No or phone number before searching.", "is-error");
+      return;
+    }
+    if (phone && !isReasonablePhone(phone)) {
+      el.searchResults.innerHTML = renderInlineMessage("Enter a valid phone with 10 to 15 digits before searching.", "is-error");
+      return;
+    }
+
     const params = new URLSearchParams();
-    if (el.searchCaseNo.value.trim()) params.set("case_no", el.searchCaseNo.value.trim());
-    if (el.searchPhone.value.trim()) params.set("phone", el.searchPhone.value.trim());
+    if (caseNo) params.set("case_no", caseNo);
+    if (phone) params.set("phone", phone);
 
     const path = `/v1/cases${params.toString() ? `?${params.toString()}` : ""}`;
     const result = await api(path, { method: "GET" });
 
     if (!result.data || result.data.length === 0) {
-      el.searchResults.innerHTML = "<p class='hint'>No cases found</p>";
+      el.searchResults.innerHTML = renderInlineMessage("No cases found for the provided search.");
       return;
     }
 
@@ -1373,45 +1875,51 @@ el.searchBtn.addEventListener("click", async () => {
         const customer = Array.isArray(customerRaw)
           ? (customerRaw[0] || {})
           : (customerRaw || {});
-        return `<div class="case-item"><b>${row.case_no}</b><br/>case_id: ${row.id}<br/>status: ${row.header_status}<br/>customer: ${customer.name || ""} (${customer.phone || ""})<br/><button type="button" class="ghost use-case-btn" data-case-id="${row.id}">Use in Status/Phase4</button></div>`;
+        return `
+          <article class="search-result-card">
+            <div class="search-result-head">
+              <div>
+                <p class="search-result-case-no">${row.case_no || "NA"}</p>
+                <p class="search-result-customer">${customer.name || "Unknown customer"}</p>
+              </div>
+              <span class="search-result-status">${row.header_status || "NA"}</span>
+            </div>
+            <div class="search-result-meta">
+              <span><strong>Phone</strong> ${customer.phone || "NA"}</span>
+              <span><strong>Case ID</strong> ${row.id}</span>
+            </div>
+            <button type="button" class="ghost use-case-btn" data-case-id="${row.id}" data-case-no="${row.case_no || ""}">Open Status Workspace</button>
+          </article>
+        `;
       })
       .join("");
-  } catch (error) {
-    el.searchResults.innerHTML = `<p class='hint'>Search failed: ${error.message}</p>`;
-  }
+  }).catch((error) => {
+    el.searchResults.innerHTML = renderInlineMessage(formatUiError("search_cases", error.message), "is-error");
+  });
 });
 
-el.updateStatusBtn.addEventListener("click", async () => {
-  try {
-    const caseId = el.statusCaseId.value.trim();
-    const itemId = el.statusItemId.value.trim();
-    const result = await api(`/v1/cases/${caseId}/items/${itemId}/status`, {
-      method: "POST",
-      body: JSON.stringify({
-        to_status: el.toStatus.value,
-        note: el.statusNote.value.trim()
-      })
-    });
-    setText(el.statusResult, `Updated: ${result.data.from_status} -> ${result.data.to_status} | header=${result.data.header_status}`);
-    syncOperationalContextFromCase();
-  } catch (error) {
-    setText(el.statusResult, `Status update failed: ${error.message}`);
-  }
-});
-
-el.searchResults.addEventListener("click", (event) => {
+el.searchResults.addEventListener("click", async (event) => {
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
   if (!target.classList.contains("use-case-btn")) return;
 
   const caseId = target.getAttribute("data-case-id") || "";
+  const caseNo = target.getAttribute("data-case-no") || "";
   if (!caseId) return;
 
   el.statusCaseId.value = caseId;
+  caseWorkflowState.caseNo = caseNo;
   el.estimateCaseId.value = caseId;
   el.phase5CaseId.value = caseId;
   setActiveCasePanel("case-panel-status");
-  setText(el.statusResult, `Case selected: ${caseId}. Load item IDs from case detail flow if needed.`);
+  try {
+    await withButtonBusy(target, "Opening...", async () => {
+      await loadCaseWorkflowContext(caseId, { silent: true });
+    });
+    setFeedback(el.statusResult, `Case selected: ${caseNo || caseId}. Status workspace is ready.`, "success");
+  } catch {
+    setFeedback(el.statusResult, `Case selected: ${caseId}. Load latest case details to continue.`, "error");
+  }
 });
 
 el.createInventoryBtn?.addEventListener("click", async () => {
@@ -1851,17 +2359,53 @@ el.restoreArchiveBtn?.addEventListener("click", async () => {
 });
 
 el.historyBtn.addEventListener("click", async () => {
-  try {
+  await withButtonBusy(el.historyBtn, "Loading...", async () => {
     const caseId = el.statusCaseId.value.trim();
+    if (!caseId) {
+      if (el.historyTimeline) {
+        el.historyTimeline.innerHTML = "<p class='hint'>Enter Case ID and load latest case details first.</p>";
+      }
+      return;
+    }
+
     const result = await api(`/v1/cases/${caseId}/status-history`, { method: "GET" });
-    el.history.textContent = JSON.stringify(result.data, null, 2);
-  } catch (error) {
-    el.history.textContent = `History failed: ${error.message}`;
-  }
+    const rows = Array.isArray(result.data) ? result.data : [];
+
+    if (!el.historyTimeline) return;
+    if (!rows.length) {
+      el.historyTimeline.innerHTML = "<p class='hint'>No status history found for this case.</p>";
+      return;
+    }
+
+    const lineByItemId = Object.fromEntries((caseWorkflowState.items || []).map((row) => [row.id, row.line_no]));
+
+    el.historyTimeline.innerHTML = rows
+      .map((row) => {
+        const lineNo = lineByItemId[row.case_item_id] || "-";
+        const changedAt = row.changed_at_utc ? new Date(row.changed_at_utc).toLocaleString() : "NA";
+        const fromStatus = row.from_status || "Start";
+        const toStatus = row.to_status || "NA";
+        const note = row.note || "-";
+        return `
+          <div class="history-row">
+            <div class="history-row-head">
+              <b>Item ${lineNo}: ${fromStatus} -> ${toStatus}</b>
+              <span class="hint">${changedAt}</span>
+            </div>
+            <div class="history-row-meta">Note: ${note}</div>
+          </div>
+        `;
+      })
+      .join("");
+  }).catch((error) => {
+    if (el.historyTimeline) {
+      el.historyTimeline.innerHTML = `<p class='hint'>${formatUiError("load_case_context", error.message)}</p>`;
+    }
+  });
 });
 
 el.loadFollowupsBtn.addEventListener("click", async () => {
-  try {
+  await withButtonBusy(el.loadFollowupsBtn, "Loading...", async () => {
     const params = new URLSearchParams();
     const queue = el.followupQueue.value;
     const itemStatus = el.followupStatus.value.trim();
@@ -1870,7 +2414,7 @@ el.loadFollowupsBtn.addEventListener("click", async () => {
 
     const result = await api(`/v1/followups?${params.toString()}`, { method: "GET" });
     if (!result.data || result.data.length === 0) {
-      el.followupResults.innerHTML = "<p class='hint'>No follow-up rows found</p>";
+      el.followupResults.innerHTML = renderInlineMessage("No follow-up rows found for this queue.");
       return;
     }
 
@@ -1880,7 +2424,26 @@ el.loadFollowupsBtn.addEventListener("click", async () => {
         const caseObj = Array.isArray(caseObjRaw) ? (caseObjRaw[0] || {}) : (caseObjRaw || {});
         const customerRaw = caseObj.customers;
         const customer = Array.isArray(customerRaw) ? (customerRaw[0] || {}) : (customerRaw || {});
-        return `<div class="case-item"><b>${caseObj.case_no || ""}</b><br/>case_id: ${row.case_id}<br/>item_id: ${row.id}<br/>status: ${row.item_status}<br/>customer: ${customer.name || ""} (${customer.phone || ""})</div>`;
+        const dueAt = caseObj.followup_due_at_utc ? new Date(caseObj.followup_due_at_utc).toLocaleString() : "Not set";
+        const reminderState = caseObj.followup_reminder_state || "PENDING";
+        return `
+          <article class="followup-result-card">
+            <div class="followup-result-head">
+              <div>
+                <p class="followup-result-case-no">${caseObj.case_no || "NA"}</p>
+                <p class="followup-result-customer">${customer.name || "Unknown customer"}</p>
+              </div>
+              <span class="followup-result-status">${row.item_status || "NA"}</span>
+            </div>
+            <div class="followup-result-meta">
+              <span><strong>Phone</strong> ${customer.phone || "NA"}</span>
+              <span><strong>Case ID</strong> ${row.case_id}</span>
+              <span><strong>Reminder</strong> ${reminderState}</span>
+              <span><strong>Due</strong> ${dueAt}</span>
+            </div>
+            <button type="button" class="ghost use-followup-case-btn" data-case-id="${row.case_id}">Use This Case</button>
+          </article>
+        `;
       })
       .join("");
 
@@ -1888,9 +2451,20 @@ el.loadFollowupsBtn.addEventListener("click", async () => {
       el.followupCaseId.value = result.data[0].case_id;
     }
     setActiveStepPanel("followup", "followup-panel-note");
-  } catch (error) {
-    el.followupResults.innerHTML = `<p class='hint'>Follow-up load failed: ${error.message}</p>`;
-  }
+  }).catch((error) => {
+    el.followupResults.innerHTML = renderInlineMessage(`Follow-up load failed: ${error.message}`, "is-error");
+  });
+});
+
+el.followupResults.addEventListener("click", (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+  if (!target.classList.contains("use-followup-case-btn")) return;
+
+  const caseId = target.getAttribute("data-case-id") || "";
+  if (!caseId) return;
+  el.followupCaseId.value = caseId;
+  setFeedback(el.followupResult, `Follow-up note will be saved on case ${caseId}.`, "success");
 });
 
 el.saveFollowupNoteBtn.addEventListener("click", async () => {
@@ -2218,6 +2792,7 @@ wireStepPanelNavigation();
 activateLane("lane-primary", { scroll: false });
 setPrimaryModuleActive("module-case", { scroll: false });
 setActiveCasePanel("case-panel-create");
+resetCaseWorkflowState();
 setActiveStepPanel("followup", "followup-panel-queue");
 setActiveStepPanel("archive", "archive-panel-usage");
 setActiveStepPanel("billing", "billing-panel-estimate");

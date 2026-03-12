@@ -13,11 +13,10 @@
   <main class="container app-shell">
     <header class="hero card">
       <div>
-        <h1>Workshop Ops Console</h1>
-        <p class="subtitle">Simple, ordered, and workflow-first operations for Case, Follow-up, Backup, Inventory, Analytics, and HR.</p>
+        <h1>Rajesh Electricals</h1>
       </div>
       <div id="sessionDock" class="session-dock is-hidden">
-        <span id="whoamiTop" class="session-user">Admin</span>
+        <span id="whoamiTop" class="session-user">Hi Guest</span>
         <button id="logoutTopBtn" class="ghost">Logout</button>
       </div>
       <!-- <div class="hero-badges">
@@ -55,35 +54,38 @@
     <div id="appWorkspace" class="is-hidden">
     <section class="card quick-strip" id="quickActionsStrip">
       <h2>Quick Actions</h2>
-      <p class="hint">One-tap daily actions for the highest-frequency workflow.</p>
-      <div class="quick-actions-grid">
-        <button id="quickCreateCaseBtn">Create Case</button>
-        <button id="quickSearchCaseBtn" class="ghost">Search Case</button>
-        <button id="quickLoadFollowupsBtn" class="ghost">Load Follow-ups</button>
-        <button id="quickRunDailyCloseBtn" class="ghost">Run Daily Close</button>
-        <button id="quickLoadArchiveIndexBtn" class="ghost">Load Archive Index</button>
+      <p class="hint">Primary navigation stays here: daily case flow first, then backup visibility, then secondary workspaces.</p>
+      <div class="quick-actions-stack">
+        <section class="quick-actions-group" aria-label="Primary operations">
+          <div class="quick-actions-group-head">
+            <h3>Daily Core</h3>
+            <p class="hint">Short, scan-fast actions for the main workshop flow.</p>
+          </div>
+          <div class="quick-actions-grid quick-actions-grid-primary">
+            <button id="quickCreateCaseBtn">New Case</button>
+            <button id="quickSearchCaseBtn" class="ghost">Find Case</button>
+            <button id="quickOpenStatusBtn" class="ghost">Status</button>
+            <button id="quickLoadFollowupsBtn" class="ghost">Follow-up</button>
+            <button id="quickRunDailyCloseBtn" class="ghost">Close Day</button>
+            <button id="quickLoadArchiveIndexBtn" class="ghost">Archive</button>
+          </div>
+        </section>
+
+        <section class="quick-actions-group" aria-label="Secondary workspaces">
+          <div class="quick-actions-group-head">
+            <h3>Other Workspaces</h3>
+            <p class="hint">Secondary lanes stay reachable without overpowering daily work.</p>
+          </div>
+          <div class="quick-actions-grid quick-actions-grid-secondary">
+            <button id="quickBillingBtn" class="ghost">Billing</button>
+            <button id="quickInventoryBtn" class="ghost">Stock</button>
+            <button id="quickAnalyticsBtn" class="ghost">Analytics</button>
+            <button id="quickHrBtn" class="ghost">HR</button>
+          </div>
+        </section>
       </div>
       <p id="quickActionsHint" class="hint"></p>
     </section>
-
-    <div class="layout-grid">
-      <aside class="card nav-card">
-        <h2>Quick Navigator</h2>
-        <p class="hint">Jump by operational flow, not by phase number.</p>
-        <p class="hint nav-group-label">Core Ops</p>
-        <a href="#module-case" class="jump-link" data-lane-target="lane-primary">1.1 Create New Case</a>
-        <a href="#module-case" class="jump-link" data-lane-target="lane-primary" data-case-panel-target="case-panel-search">1.2 Search Existing Cases</a>
-        <a href="#module-case" class="jump-link" data-lane-target="lane-primary" data-case-panel-target="case-panel-status">1.3 Case Status Update</a>
-        <a href="#module-followup" class="jump-link" data-lane-target="lane-primary" data-step-group="followup" data-step-target="followup-panel-queue">1.4 Follow-up Queue</a>
-        <a href="#module-followup" class="jump-link" data-lane-target="lane-primary" data-step-group="followup" data-step-target="followup-panel-close">1.5 Daily Close</a>
-        <a href="#module-billing" class="jump-link" data-lane-target="lane-primary" data-step-group="billing" data-step-target="billing-panel-estimate">1.6 Create Estimate</a>
-        <a href="#module-billing" class="jump-link" data-lane-target="lane-primary" data-step-group="billing" data-step-target="billing-panel-finalize">1.7 Finalize + Lock</a>
-        <a href="#module-archive" class="jump-link" data-lane-target="lane-primary" data-step-group="archive" data-step-target="archive-panel-index">1.8 Archive Index + Restore</a>
-        <p class="hint nav-group-label">Other Lanes</p>
-        <a href="#lane-inventory" class="jump-link" data-lane-target="lane-inventory">2. Inventory Lane</a>
-        <a href="#lane-analytics" class="jump-link" data-lane-target="lane-analytics">3. Analytics Lane</a>
-        <a href="#lane-hr" class="jump-link" data-lane-target="lane-hr">4. HR Lane</a>
-      </aside>
 
       <div class="lanes">
         <section class="lane" id="lane-primary">
@@ -93,12 +95,13 @@
           </div>
 
           <details class="card" id="module-case" open>
-            <summary>Case Intake + Status (Phase 2)</summary>
-            <p class="hint">Work in sequence: create case, then search/use case context, then update item status.</p>
-            <div class="case-flow-switcher" role="tablist" aria-label="Case workflow switcher">
-              <button type="button" id="casePanelCreateBtn" class="case-panel-tab is-active" data-case-panel-target="case-panel-create" role="tab" aria-selected="true">1. Create New Case</button>
-              <button type="button" id="casePanelSearchBtn" class="case-panel-tab ghost" data-case-panel-target="case-panel-search" role="tab" aria-selected="false">2. Search Existing Cases</button>
-              <button type="button" id="casePanelStatusBtn" class="case-panel-tab ghost" data-case-panel-target="case-panel-status" role="tab" aria-selected="false">3. Case Status Update</button>
+            <summary><span id="moduleCaseSummary">Case Intake + Status (Phase 2)</span></summary>
+            <div id="caseWorkflowChrome">
+              <p id="caseWorkflowHint" class="hint">Work in sequence: create case, then search/use case context, then update item status.</p>
+              <div id="caseFlowSwitcher" class="case-flow-switcher case-flow-switcher-two" role="tablist" aria-label="Case workflow switcher">
+              <button type="button" id="casePanelCreateBtn" class="case-panel-tab is-active" data-case-panel-target="case-panel-create" role="tab" aria-selected="true">Step 1: Create Case</button>
+              <button type="button" id="casePanelStatusBtn" class="case-panel-tab" data-case-panel-target="case-panel-status" role="tab" aria-selected="false">Step 2: Update Status</button>
+              </div>
             </div>
 
             <section class="case-flow-block case-panel case-panel-active" id="case-panel-create">
@@ -125,11 +128,12 @@
 
                 <div id="caseItemsContainer" class="case-items-container"></div>
                 <button id="createCaseBtn">Create Case</button>
-                <p id="createResult" class="hint"></p>
+                <p id="createResult" class="hint form-feedback" aria-live="polite"></p>
               </section>
 
               <section class="case-flow-block case-panel" id="case-panel-search">
                 <h3>Search Existing Cases</h3>
+                <p class="hint">Search stays separate from the create steps so operators can jump directly to an existing case.</p>
                 <div class="workflow-grid">
                   <div>
                     <label>Search By Case No</label>
@@ -141,7 +145,7 @@
                   </div>
                 </div>
                 <button id="searchBtn" class="ghost">Search Cases</button>
-                <div id="searchResults"></div>
+                <div id="searchResults" aria-live="polite"></div>
               </section>
 
             <section class="case-flow-block case-panel" id="case-panel-status">
@@ -152,33 +156,30 @@
                   <input id="statusCaseId" />
                 </div>
                 <div>
-                  <label>Case Item ID</label>
-                  <input id="statusItemId" />
+                  <label>Refresh Case Details</label>
+                  <button id="loadCaseItemsBtn" type="button" class="ghost">Refresh Case Details</button>
                 </div>
                 <div>
-                  <label>To Status</label>
-                  <select id="toStatus">
-                    <option>Diagnosis</option>
-                    <option>WaitingApproval</option>
-                    <option>ApprovedForRepair</option>
-                    <option>RejectedByCustomer</option>
-                    <option>InRepair</option>
-                    <option>Ready</option>
-                    <option>Delivered</option>
-                    <option>Cancelled</option>
-                  </select>
+                  <label>Current Case No</label>
+                  <input id="statusCaseNo" readonly />
                 </div>
                 <div>
-                  <label>Status Note</label>
-                  <input id="statusNote" placeholder="optional note" />
+                  <label>Case Header Status</label>
+                  <input id="statusHeaderStatus" readonly />
                 </div>
               </div>
-              <div class="row">
-                <button id="updateStatusBtn">Update Status</button>
-                <button id="historyBtn" class="ghost">Load Status History</button>
+              <input id="statusItemId" type="hidden" />
+
+              <div class="status-progress-shell">
+                <div id="statusProgressBar" class="status-progress-bar"></div>
+                <p id="statusProgressLabel" class="hint">Select To Status in a row to preview status path.</p>
               </div>
-              <p id="statusResult" class="hint"></p>
-              <pre id="history"></pre>
+
+              <button id="historyBtn" class="ghost">View Status Timeline</button>
+              <p id="statusResult" class="hint form-feedback" aria-live="polite"></p>
+
+              <div id="caseStatusItemsBoard" class="case-status-group-board"></div>
+              <div id="historyTimeline" class="history-timeline"></div>
             </section>
           </details>
 
@@ -617,7 +618,6 @@
           </details>
         </section>
       </div>
-    </div>
     </div>
   </main>
 
