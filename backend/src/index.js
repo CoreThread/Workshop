@@ -3377,6 +3377,33 @@ export default {
       const inventorySliceTimeoutMs = Math.max(800, Math.min(12000, toSafeInt(url.searchParams.get("inventory_slice_timeout_ms"), analyticsBaseQueryTimeoutMs)));
       const expenseSliceTimeoutMs = Math.max(800, Math.min(12000, toSafeInt(url.searchParams.get("expense_slice_timeout_ms"), analyticsBaseQueryTimeoutMs)));
       const financeSliceTimeoutMs = Math.max(800, Math.min(12000, toSafeInt(url.searchParams.get("finance_slice_timeout_ms"), analyticsBaseQueryTimeoutMs)));
+      const guardrailsOnly = String(url.searchParams.get("guardrails_only") || "false").toLowerCase() === "true";
+      const role = auth.user.role;
+      const businessDateLocal = getBusinessDateInTimezone(env.DEFAULT_TIMEZONE || "Asia/Kolkata");
+      const queryGuardrails = {
+        row_limit_requested: rowLimitRequested,
+        row_limit_effective: rowLimit,
+        timeouts_ms: {
+          base_query_timeout_ms: analyticsBaseQueryTimeoutMs,
+          case_slice_timeout_ms: caseSliceTimeoutMs,
+          inventory_slice_timeout_ms: inventorySliceTimeoutMs,
+          expense_slice_timeout_ms: expenseSliceTimeoutMs,
+          finance_slice_timeout_ms: financeSliceTimeoutMs
+        }
+      };
+
+      if (guardrailsOnly) {
+        return json(200, {
+          code: "OK",
+          data: {
+            window_days: days,
+            role,
+            business_date_local: businessDateLocal,
+            guardrails_only: true,
+            query_guardrails: queryGuardrails
+          }
+        });
+      }
 
       const nowIso = new Date().toISOString();
       const sinceIso = new Date(Date.now() - (days * 24 * 60 * 60 * 1000)).toISOString();
@@ -3660,7 +3687,6 @@ export default {
         };
       });
 
-      const role = auth.user.role;
       let finance;
       if (role === "Admin") {
         finance = {
@@ -3695,18 +3721,8 @@ export default {
         data: {
           window_days: days,
           role,
-          business_date_local: getBusinessDateInTimezone(env.DEFAULT_TIMEZONE || "Asia/Kolkata"),
-          query_guardrails: {
-            row_limit_requested: rowLimitRequested,
-            row_limit_effective: rowLimit,
-            timeouts_ms: {
-              base_query_timeout_ms: analyticsBaseQueryTimeoutMs,
-              case_slice_timeout_ms: caseSliceTimeoutMs,
-              inventory_slice_timeout_ms: inventorySliceTimeoutMs,
-              expense_slice_timeout_ms: expenseSliceTimeoutMs,
-              finance_slice_timeout_ms: financeSliceTimeoutMs
-            }
-          },
+          business_date_local: businessDateLocal,
+          query_guardrails: queryGuardrails,
           case_followup_kpis: {
             received_cases: receivedCount,
             delivered_items: deliveredCount,

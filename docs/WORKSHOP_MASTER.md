@@ -176,6 +176,8 @@
 ## Change History
 
 ### 2026-05-31
+- Added authenticated `guardrails_only=true` mode to `GET /v1/analytics/overview` so release hardening checks can validate row-limit and timeout clamps without forcing live Supabase analytics slices through intentionally tiny timeouts.
+- Updated Phase 8 hardening smoke scripts to use analytics guardrails-only mode for upper/lower clamp checks; the normal analytics smoke still validates real data queries.
 - Tightened reversible basic frontend mode so the operator UI now focuses only on New Case and Find Case Details.
 - Hid Follow-up, Close Day, Backup, Billing, Stock, Analytics, and HR from the current first-run UI while leaving existing backend APIs and frontend modules in place for later re-enable.
 - Replaced Recent Cases with Active Cases after login, filtering out closed cases and highlighting open cases at 2+ days in yellow and more than 3 days in red.

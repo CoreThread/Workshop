@@ -46,11 +46,12 @@ if (-not $loginRes.data.access_token) { throw "LOGIN_TOKEN_MISSING" }
 
 $headers = @{ Authorization = "Bearer $($loginRes.data.access_token)" }
 
-$upperUrl = "$base/v1/analytics/overview?days=30&row_limit=999999&query_timeout_ms=6500&case_slice_timeout_ms=4100&inventory_slice_timeout_ms=4200&expense_slice_timeout_ms=4300&finance_slice_timeout_ms=4400"
+$upperUrl = "$base/v1/analytics/overview?days=30&row_limit=999999&query_timeout_ms=6500&case_slice_timeout_ms=4100&inventory_slice_timeout_ms=4200&expense_slice_timeout_ms=4300&finance_slice_timeout_ms=4400&guardrails_only=true"
 $upperRes = Invoke-RestMethod -Method Get -Uri $upperUrl -Headers $headers
 Ensure-OkResponse $upperRes "ANALYTICS_HARDENING_UPPER_CALL_FAILED"
 
 if ($null -eq $upperRes.data.query_guardrails) { throw "ANALYTICS_GUARDRAILS_MISSING" }
+if ($upperRes.data.guardrails_only -ne $true) { throw "ANALYTICS_GUARDRAILS_ONLY_MISSING" }
 if ($upperRes.data.query_guardrails.row_limit_effective -gt 1500) { throw "ANALYTICS_ROW_LIMIT_MAX_GUARD_FAILED" }
 if ($upperRes.data.query_guardrails.row_limit_effective -ne 1500) { throw "ANALYTICS_ROW_LIMIT_UPPER_CLAMP_UNEXPECTED" }
 if ($upperRes.data.query_guardrails.timeouts_ms.case_slice_timeout_ms -ne 4100) { throw "ANALYTICS_CASE_TIMEOUT_TUNING_FAILED" }
@@ -58,10 +59,11 @@ if ($upperRes.data.query_guardrails.timeouts_ms.inventory_slice_timeout_ms -ne 4
 if ($upperRes.data.query_guardrails.timeouts_ms.expense_slice_timeout_ms -ne 4300) { throw "ANALYTICS_EXPENSE_TIMEOUT_TUNING_FAILED" }
 if ($upperRes.data.query_guardrails.timeouts_ms.finance_slice_timeout_ms -ne 4400) { throw "ANALYTICS_FINANCE_TIMEOUT_TUNING_FAILED" }
 
-$lowerUrl = "$base/v1/analytics/overview?days=30&row_limit=1&query_timeout_ms=100&case_slice_timeout_ms=1&inventory_slice_timeout_ms=1&expense_slice_timeout_ms=1&finance_slice_timeout_ms=1"
+$lowerUrl = "$base/v1/analytics/overview?days=30&row_limit=1&query_timeout_ms=100&case_slice_timeout_ms=1&inventory_slice_timeout_ms=1&expense_slice_timeout_ms=1&finance_slice_timeout_ms=1&guardrails_only=true"
 $lowerRes = Invoke-RestMethod -Method Get -Uri $lowerUrl -Headers $headers
 Ensure-OkResponse $lowerRes "ANALYTICS_HARDENING_LOWER_CALL_FAILED"
 
+if ($lowerRes.data.guardrails_only -ne $true) { throw "ANALYTICS_LOWER_GUARDRAILS_ONLY_MISSING" }
 if ($lowerRes.data.query_guardrails.row_limit_effective -lt 50) { throw "ANALYTICS_ROW_LIMIT_MIN_GUARD_FAILED" }
 if ($lowerRes.data.query_guardrails.row_limit_effective -ne 50) { throw "ANALYTICS_ROW_LIMIT_LOWER_CLAMP_UNEXPECTED" }
 if ($lowerRes.data.query_guardrails.timeouts_ms.base_query_timeout_ms -lt 1200) { throw "ANALYTICS_BASE_TIMEOUT_MIN_GUARD_FAILED" }
