@@ -370,6 +370,15 @@ button.warn {
   background: linear-gradient(180deg, #fffdf8 0%, #fff6ec 100%);
 }
 
+body.prod-hosted .connection-panel {
+  display: none !important;
+}
+
+body.prod-hosted .auth-card .split-two {
+  grid-template-columns: minmax(260px, 420px);
+  justify-content: center;
+}
+
 #loginGateHint {
   margin-top: 8px;
   background: #eef5ff;

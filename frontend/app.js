@@ -1,8 +1,15 @@
+const DEFAULT_API_BASE = "https://workshop-api.jaiswal-utkarshuj.workers.dev";
+
 const storage = {
   get apiBase() {
-    return localStorage.getItem("apiBase") || "https://workshop-api.jaiswal-utkarshuj.workers.dev";
+    if (isHostedApp()) return DEFAULT_API_BASE;
+    return localStorage.getItem("apiBase") || DEFAULT_API_BASE;
   },
   set apiBase(value) {
+    if (isHostedApp()) {
+      localStorage.removeItem("apiBase");
+      return;
+    }
     localStorage.setItem("apiBase", value);
   },
   get token() {
@@ -32,6 +39,7 @@ const el = {
   caseSurfaceTitle: document.getElementById("caseSurfaceTitle"),
   sessionDock: document.getElementById("sessionDock"),
   loginGateHint: document.getElementById("loginGateHint"),
+  connectionPanel: document.getElementById("connectionPanel"),
   lanePrimary: document.getElementById("lane-primary"),
   laneInventory: document.getElementById("lane-inventory"),
   laneAnalytics: document.getElementById("lane-analytics"),
@@ -257,6 +265,7 @@ const BASIC_FEATURE_MODE = true;
 
 el.apiBase.value = storage.apiBase;
 document.body.classList.toggle("basic-mode", BASIC_FEATURE_MODE);
+document.body.classList.toggle("prod-hosted", isHostedApp());
 
 const phase5State = {
   lastConsumptionId: "",
@@ -844,6 +853,11 @@ function normalizeBase(value) {
 
 function isLocalBase(base) {
   return /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(base);
+}
+
+function isHostedApp() {
+  const host = window.location.hostname.toLowerCase();
+  return window.location.protocol === "https:" && host !== "localhost" && host !== "127.0.0.1";
 }
 
 function buildFetchErrorMessage(base, originalMessage) {

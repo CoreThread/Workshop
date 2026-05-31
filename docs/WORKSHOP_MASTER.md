@@ -44,11 +44,10 @@
 - GitHub repo: `https://github.com/CoreThread/Workshop`
 - Backend Worker: `https://workshop-api.jaiswal-utkarshuj.workers.dev`
 - Frontend Pages stable: `https://workshop-frontend.pages.dev`
-- Latest frontend preview verified in this session: `https://00b65493.workshop-frontend.pages.dev`
-- Latest frontend preview verified in this session: `https://495e8877.workshop-frontend.pages.dev`
+- Custom frontend domain can be attached from Cloudflare Pages after the domain/subdomain is owned and DNS is available. Do not use `workshop.com`/`RE.workshop.com` unless that domain is owned; prefer a controlled domain such as `app.<owned-domain>` or `workshop.<owned-domain>`.
 - Cloudflare Pages deploy command:
   - `npx --prefix backend wrangler pages deploy frontend --project-name workshop-frontend --branch main --commit-dirty=true`
-- Latest frontend preview verified in this session: `https://78037293.workshop-frontend.pages.dev`
+- Latest frontend preview verified in this session: `https://2e7bfc18.workshop-frontend.pages.dev`
 
 ## Implementation Status
 
@@ -68,6 +67,7 @@
 ### Current Frontend Direction
 - The post-login home screen is a compact workshop console: New Case, Find Case Details, Inventory, and Active Cases for Admin/IT; Staff sees read-only Find Case Details, Inventory, and Active Cases.
 - The current basic login form defaults to the IT operator account because Staff is intentionally view-only.
+- Hosted production hides the developer Connection/API Base URL panel and always uses the production Worker API; local file/dev usage can still show the API Base URL for testing.
 - Case create, search, and status details are no longer displayed on the home screen; they open in a separate case workspace with Back navigation.
 - Basic frontend mode is active: first-screen operations are New Case, Find Case Details, Inventory, plus the active-case queue for Admin/IT; Staff has no write entry point.
 - Lane 1 remains available behind the case workspace and uses focused single-module visibility to reduce clutter.
