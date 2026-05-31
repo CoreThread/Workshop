@@ -44,9 +44,11 @@
 - GitHub repo: `https://github.com/CoreThread/Workshop`
 - Backend Worker: `https://workshop-api.jaiswal-utkarshuj.workers.dev`
 - Frontend Pages stable: `https://workshop-frontend.pages.dev`
-- Custom frontend domain can be attached from Cloudflare Pages after the domain/subdomain is owned and DNS is available. Do not use `workshop.com`/`RE.workshop.com` unless that domain is owned; prefer a controlled domain such as `app.<owned-domain>` or `workshop.<owned-domain>`.
+- Target custom frontend domain: `re-workshop.com` after ownership/DNS is ready in Cloudflare Pages.
+- Custom frontend domain can be attached from Cloudflare Pages after the domain/subdomain is owned and DNS is available. Do not use `workshop.com`/`RE.workshop.com` unless that domain is owned.
 - Cloudflare Pages deploy command:
   - `npx --prefix backend wrangler pages deploy frontend --project-name workshop-frontend --branch main --commit-dirty=true`
+- Wrangler CLI: local and global installs verified at `4.95.0`; plain `wrangler` resolves from the user npm command folder in PowerShell.
 - Latest frontend preview verified in this session: `https://2e7bfc18.workshop-frontend.pages.dev`
 
 ## Implementation Status
