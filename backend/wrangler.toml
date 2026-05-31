@@ -2,6 +2,9 @@ name = "workshop-api"
 main = "src/index.js"
 compatibility_date = "2026-03-03"
 
+[triggers]
+crons = ["0 3 */3 * *"]
+
 [vars]
 APP_ENV = "development"
 DEFAULT_TIMEZONE = "Asia/Kolkata"

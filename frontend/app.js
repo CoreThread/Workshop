@@ -319,6 +319,10 @@ function canManageInventory() {
   return ["ADMIN", "IT"].includes(getCurrentRole());
 }
 
+function canWriteCases() {
+  return ["ADMIN", "IT"].includes(getCurrentRole());
+}
+
 function setText(node, text) {
   node.textContent = text;
 }
@@ -584,7 +588,7 @@ function validateEstimateDraftForSubmit(itemId) {
 }
 
 function shouldShowEstimateWorkbench(row = {}) {
-  return CASE_STATUS_ESTIMATE_WORKBENCH_STATUSES.has(row.item_status);
+  return canWriteCases() && CASE_STATUS_ESTIMATE_WORKBENCH_STATUSES.has(row.item_status);
 }
 
 function getStatusGuidance(row = {}) {
@@ -905,12 +909,13 @@ function showHomeConsole(options = {}) {
 
 function showCaseSurface(panelId, options = {}) {
   const { scroll = true } = options;
+  const nextPanelId = panelId === "case-panel-create" && !canWriteCases() ? "case-panel-search" : panelId;
   setHidden(el.homeConsole, true);
   setHidden(el.caseDeskSurface, false);
   activateLane("lane-primary", { scroll: false });
   setPrimaryModuleActive("module-case", { scroll: false });
-  setActiveCasePanel(panelId);
-  syncCaseSurfaceTitle(panelId);
+  setActiveCasePanel(nextPanelId);
+  syncCaseSurfaceTitle(nextPanelId);
   if (scroll) {
     el.caseDeskSurface?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -960,9 +965,33 @@ function syncInventoryPermissions() {
   }
 }
 
+function syncCaseWritePermissions() {
+  const canWrite = canWriteCases();
+  document.body.classList.toggle("case-readonly", !canWrite && getCurrentRole() === "STAFF");
+
+  const createPanel = document.getElementById("case-panel-create");
+  const createTab = document.getElementById("casePanelCreateBtn");
+  setHidden(el.quickCreateCaseBtn, !canWrite);
+  setHidden(createTab, !canWrite);
+  setHidden(createPanel, !canWrite);
+  setHidden(el.saveCaseNotesBtn, !canWrite);
+
+  if (el.caseNotes) {
+    el.caseNotes.readOnly = !canWrite;
+  }
+
+  const activePanel = casePanels().find((panel) => panel.classList.contains("case-panel-active"));
+  if (!canWrite && activePanel?.id === "case-panel-create") {
+    setActiveCasePanel("case-panel-search");
+  }
+
+  renderCaseStatusItemsBoard();
+}
+
 function finalizeVisibility() {
   applyFeatureModeOverrides();
   syncInventoryPermissions();
+  syncCaseWritePermissions();
   applyLoginGate();
   syncLaneWithRoleVisibility();
   syncPrimaryModuleWithRoleVisibility();
@@ -1140,15 +1169,17 @@ function renderCaseDetailSummary() {
 function renderCaseStatusItemsBoard() {
   if (!el.caseStatusItemsBoard) return;
   const rows = caseWorkflowState.items || [];
+  const canWrite = canWriteCases();
   if (!rows.length) {
-    el.caseStatusItemsBoard.innerHTML = "<p class='hint'>Open a case from New Case, Find Case, or Recent Cases.</p>";
+    const emptyHint = canWrite ? "Open a case from New Case, Find Case, or Active Cases." : "Open a case from Find Case or Active Cases.";
+    el.caseStatusItemsBoard.innerHTML = `<p class='hint'>${emptyHint}</p>`;
     renderCaseDetailSummary();
     return;
   }
 
   el.caseStatusItemsBoard.innerHTML = rows
     .map((row, index) => {
-        const allowedStatuses = getVisibleNextStatuses(row.item_status, CASE_STATUS_TRANSITIONS[row.item_status] || []);
+        const allowedStatuses = canWrite ? getVisibleNextStatuses(row.item_status, CASE_STATUS_TRANSITIONS[row.item_status] || []) : [];
         const primaryStatuses = allowedStatuses.filter((s) => s !== "Cancelled" && s !== "RejectedByCustomer");
         const secondaryStatuses = allowedStatuses.filter((s) => s === "Cancelled" || s === "RejectedByCustomer");
 
@@ -1182,7 +1213,7 @@ function renderCaseStatusItemsBoard() {
               <span class="case-status-item-status">${escapeHtml(formatUiLabel(row.item_status || "NA"))}</span>
             </div>
             ${metaChips ? `<div class="case-status-item-meta">${metaChips}</div>` : ''}
-            ${!isTerminal ? `<div class="case-status-item-actions">
+            ${canWrite && !isTerminal ? `<div class="case-status-item-actions">
               <div class="case-status-next-actions">${statusActionButtons}</div>
             </div>` : ''}
           </article>
@@ -1302,7 +1333,9 @@ function setActiveCasePanel(panelId) {
   const panels = casePanels();
   if (!panels.length) return;
 
-  const targetPanel = panels.find((panel) => panel.id === panelId) || panels[0];
+  const nextPanelId = panelId === "case-panel-create" && !canWriteCases() ? "case-panel-search" : panelId;
+  const fallbackPanel = !canWriteCases() ? panels.find((panel) => panel.id === "case-panel-search") : panels[0];
+  const targetPanel = panels.find((panel) => panel.id === nextPanelId) || fallbackPanel || panels[0];
   panels.forEach((panel) => {
     panel.classList.toggle("case-panel-active", panel.id === targetPanel.id);
   });
@@ -1467,7 +1500,7 @@ function applyRoleView() {
     setHidden(el.quickBillingBtn, true);
     setDisabled(el.quickLoadArchiveIndexBtn, true, "Archive index is available for Admin/IT only.");
     if (el.quickActionsHint) {
-      setText(el.quickActionsHint, "Staff mode: Quick Actions stay focused on case flow, follow-ups, daily close, and inventory.");
+      setText(el.quickActionsHint, "Staff mode: case details and inventory are read-only.");
     }
     finalizeVisibility();
     return;
@@ -2066,6 +2099,10 @@ el.saveApiBase.addEventListener("click", () => {
 });
 
 el.quickCreateCaseBtn?.addEventListener("click", () => {
+  if (!canWriteCases()) {
+    showCaseSurface("case-panel-search");
+    return;
+  }
   showCaseSurface("case-panel-create");
 });
 
@@ -2358,6 +2395,7 @@ el.statusCaseId?.addEventListener("change", () => {
 });
 
 el.caseStatusItemsBoard?.addEventListener("change", (event) => {
+  if (!canWriteCases()) return;
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
   if (target.classList.contains("estimate-draft-input") || target.classList.contains("estimate-draft-select")) {
@@ -2396,6 +2434,12 @@ el.caseStatusItemsBoard?.addEventListener("toggle", (event) => {
 el.caseStatusItemsBoard?.addEventListener("click", async (event) => {
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
+
+  const writeAction = target.closest(".add-estimate-part-btn, .remove-estimate-part-btn, .save-item-estimate-btn, .row-status-action-btn");
+  if (writeAction && !canWriteCases()) {
+    setFeedback(el.statusResult, "Staff can view case details only. Login as IT to change cases.", "error");
+    return;
+  }
 
   if (target.classList.contains("add-estimate-part-btn")) {
     const itemId = target.getAttribute("data-status-item-id") || "";
@@ -2529,6 +2573,11 @@ el.caseStatusItemsBoard?.addEventListener("click", async (event) => {
 });
 
 el.createCaseBtn.addEventListener("click", async () => {
+  if (!canWriteCases()) {
+    setFeedback(el.createResult, "Staff can view case details only. Login as IT to create cases.", "error");
+    return;
+  }
+
   await withButtonBusy(el.createCaseBtn, "Creating...", async () => {
     const caseNo = el.caseNo.value.trim();
     const customerName = el.customerName.value.trim();
@@ -2666,6 +2715,11 @@ el.recentCasesList?.addEventListener("click", async (event) => {
 });
 
 el.saveCaseNotesBtn?.addEventListener("click", async () => {
+  if (!canWriteCases()) {
+    setFeedback(el.statusResult, "Staff can view case details only. Login as IT to save notes.", "error");
+    return;
+  }
+
   const caseId = caseWorkflowState.caseId || el.statusCaseId?.value?.trim() || "";
   if (!caseId) {
     setFeedback(el.statusResult, "Open a case before saving notes.", "error");

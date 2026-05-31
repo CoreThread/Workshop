@@ -22,7 +22,7 @@
 ### Roles
 - `Admin`: full access across operations, analytics, finance, HR, settings, backup, and user management.
 - `IT`: full technical and operational access except profit/margin and HR-sensitive visibility.
-- `Staff`: case operations and inventory search/check only; no inventory updates, finance, analytics, archive admin, or HR visibility.
+- `Staff`: read-only case visibility and inventory search/check only; no case creation, case notes/status updates, inventory updates, finance, analytics, archive admin, or HR visibility.
 
 ### Hard Constraints
 - Keep `/v1` API changes additive and backward-compatible.
@@ -48,7 +48,7 @@
 - Latest frontend preview verified in this session: `https://495e8877.workshop-frontend.pages.dev`
 - Cloudflare Pages deploy command:
   - `npx --prefix backend wrangler pages deploy frontend --project-name workshop-frontend --branch main --commit-dirty=true`
-- Latest frontend preview verified in this session: `https://def6939e.workshop-frontend.pages.dev`
+- Latest frontend preview verified in this session: `https://78037293.workshop-frontend.pages.dev`
 
 ## Implementation Status
 
@@ -66,16 +66,16 @@
 - Phase 10 release engineering and deterministic prod gate: complete.
 
 ### Current Frontend Direction
-- The post-login home screen is a compact workshop console: New Case, Find Case Details, Inventory, and Active Cases only.
-- The current basic login form defaults to the Staff operator account because Staff has enough access for create/find/status case operations.
+- The post-login home screen is a compact workshop console: New Case, Find Case Details, Inventory, and Active Cases for Admin/IT; Staff sees read-only Find Case Details, Inventory, and Active Cases.
+- The current basic login form defaults to the IT operator account because Staff is intentionally view-only.
 - Case create, search, and status details are no longer displayed on the home screen; they open in a separate case workspace with Back navigation.
-- Basic frontend mode is active: first-screen operations are New Case, Find Case Details, Inventory, plus the active-case queue.
+- Basic frontend mode is active: first-screen operations are New Case, Find Case Details, Inventory, plus the active-case queue for Admin/IT; Staff has no write entry point.
 - Lane 1 remains available behind the case workspace and uses focused single-module visibility to reduce clutter.
 - Search is separate from create-step semantics.
 - Status opens as a case details workspace when reached from search, create, or an active case row.
 - Offline case numbers are the visible UI reference; backend UUID case ids remain internal.
 - Secondary workspaces remain in code but are hidden from the current basic UI.
-- Case Details now shows a compact case header, text item summary, case notes box, item rows, and direct next-status buttons only; progress bars, quote, parts, estimate, and timeline controls are hidden from the current operator view.
+- Case Details now shows a compact case header, text item summary, case notes box, item rows, and direct next-status buttons for Admin/IT only; Staff sees the same details read-only. Progress bars, quote, parts, estimate, and timeline controls are hidden from the current operator view.
 - Case Details uses simplified workshop-facing labels: Received, Checking, Waiting Approval, Repairing, Waiting Part, Ready, Delivered, and Cancelled.
 - Post-login Active Cases show open cases from live DB-backed data, with 2+ day cases highlighted yellow and more-than-3-day cases highlighted red.
 - Search results and active-case rows now use simple scan-first rows instead of nested cards.
@@ -86,14 +86,22 @@
 - Validation and success messages use stronger highlighted feedback states.
 - Lightweight inline button loaders are enabled for core async Lane 1 actions.
 
+### Scheduled Keepalive
+- Cloudflare Worker cron is configured in `backend/wrangler.toml` with `0 3 */3 * *` so Wrangler runs the Worker roughly every 3 days.
+- The scheduled handler performs a read-only Supabase query against `users` and writes no app data, avoiding garbage rows while keeping the free Supabase project active.
+- Success/failure is emitted only to Worker logs with `SUPABASE_KEEPALIVE_*` markers.
+
 ## Operational Runbook
 
 ### Realistic Data Seeding
 - Script: `backend/scripts/seed_real_world_cases.mjs`
 - Purpose: populate an empty or non-production environment with realistic workshop cases using the existing `/v1` APIs.
+- Defaults to the verified IT writer account; Staff cannot run this seed because Staff is read-only.
 - Default case-number style starts from `AG-001` and can be shifted with environment overrides to avoid collisions.
 - Recommended env overrides:
   - `WORKSHOP_SEED_API_BASE`
+  - `WORKSHOP_SEED_EMAIL`
+  - `WORKSHOP_SEED_PASSWORD`
   - `WORKSHOP_SEED_START_NO`
   - `WORKSHOP_SEED_COUNT`
   - `WORKSHOP_SEED_CASE_PREFIX`

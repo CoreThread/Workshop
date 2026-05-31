@@ -5,6 +5,9 @@ const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const LOGIN_MAX_ATTEMPTS = 5;
 const LOGIN_LOCK_MS = 15 * 60 * 1000;
 const LIST_QUERY_TIMEOUT_MS = 7000;
+const SUPABASE_KEEPALIVE_QUERY_TIMEOUT_MS = 10000;
+const READ_ROLES = ["Admin", "IT", "Staff"];
+const CASE_WRITE_ROLES = ["Admin", "IT"];
 
 const ITEM_STATUS_TRANSITIONS = {
   Received: ["Diagnosis", "Cancelled"],
@@ -730,6 +733,54 @@ function requireRole(user, allowedRoles) {
   return allowedRoles.includes(user.role);
 }
 
+async function runSupabaseKeepalive(env, event = {}) {
+  const observedAtUtc = new Date().toISOString();
+  const serviceClient = getServiceClient(env);
+  if (!serviceClient) {
+    return {
+      ok: false,
+      code: "CONFIG_ERROR",
+      message: "Supabase service client is not configured",
+      observed_at_utc: observedAtUtc,
+      cron: event?.cron || null
+    };
+  }
+
+  try {
+    const result = await withTimeout(
+      serviceClient.from("users").select("id").limit(1),
+      SUPABASE_KEEPALIVE_QUERY_TIMEOUT_MS,
+      "SUPABASE_KEEPALIVE_TIMEOUT"
+    );
+
+    if (result.error) {
+      return {
+        ok: false,
+        code: "SUPABASE_KEEPALIVE_FAILED",
+        message: result.error.message || "Supabase keepalive query failed",
+        observed_at_utc: observedAtUtc,
+        cron: event?.cron || null
+      };
+    }
+
+    return {
+      ok: true,
+      code: "OK",
+      message: "Supabase keepalive read completed",
+      observed_at_utc: observedAtUtc,
+      cron: event?.cron || null
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      code: error?.code || error?.message || "SUPABASE_KEEPALIVE_ERROR",
+      message: error?.message || "Supabase keepalive query failed",
+      observed_at_utc: observedAtUtc,
+      cron: event?.cron || null
+    };
+  }
+}
+
 function mapDbRuleError(error, defaultCode = "VALIDATION_ERROR", defaultMessage = "Request violates database rules") {
   const errCode = String(error?.code || "");
   if (errCode === "P0001" || errCode === "23503" || errCode === "23514") {
@@ -909,8 +960,8 @@ export default {
     if (request.method === "POST" && url.pathname === "/v1/cases") {
       const auth = await requireAuth(request, env);
       if (auth.error) return auth.error;
-      if (!requireRole(auth.user, ["Admin", "IT", "Staff"])) {
-        return json(403, { code: "FORBIDDEN", message: "Role not allowed" });
+      if (!requireRole(auth.user, CASE_WRITE_ROLES)) {
+        return json(403, { code: "FORBIDDEN", message: "Admin/IT role required" });
       }
 
       let body;
@@ -1063,7 +1114,7 @@ export default {
     if (request.method === "GET" && url.pathname === "/v1/cases") {
       const auth = await requireAuth(request, env);
       if (auth.error) return auth.error;
-      if (!requireRole(auth.user, ["Admin", "IT", "Staff"])) {
+      if (!requireRole(auth.user, READ_ROLES)) {
         return json(403, { code: "FORBIDDEN", message: "Role not allowed" });
       }
 
@@ -1236,8 +1287,8 @@ export default {
     if (request.method === "PATCH" && /^\/v1\/cases\/[^/]+$/.test(url.pathname)) {
       const auth = await requireAuth(request, env);
       if (auth.error) return auth.error;
-      if (!requireRole(auth.user, ["Admin", "IT", "Staff"])) {
-        return json(403, { code: "FORBIDDEN", message: "Role not allowed" });
+      if (!requireRole(auth.user, CASE_WRITE_ROLES)) {
+        return json(403, { code: "FORBIDDEN", message: "Admin/IT role required" });
       }
 
       const caseId = url.pathname.split("/")[3];
@@ -1335,8 +1386,8 @@ export default {
     if (request.method === "POST" && /^\/v1\/cases\/[^/]+\/consumption$/.test(url.pathname)) {
       const auth = await requireAuth(request, env);
       if (auth.error) return auth.error;
-      if (!requireRole(auth.user, ["Admin", "IT", "Staff"])) {
-        return json(403, { code: "FORBIDDEN", message: "Role not allowed" });
+      if (!requireRole(auth.user, CASE_WRITE_ROLES)) {
+        return json(403, { code: "FORBIDDEN", message: "Admin/IT role required" });
       }
 
       const caseId = url.pathname.split("/")[3];
@@ -1436,8 +1487,8 @@ export default {
     if (request.method === "POST" && /^\/v1\/cases\/[^/]+\/items\/[^/]+\/status$/.test(url.pathname)) {
       const auth = await requireAuth(request, env);
       if (auth.error) return auth.error;
-      if (!requireRole(auth.user, ["Admin", "IT", "Staff"])) {
-        return json(403, { code: "FORBIDDEN", message: "Role not allowed" });
+      if (!requireRole(auth.user, CASE_WRITE_ROLES)) {
+        return json(403, { code: "FORBIDDEN", message: "Admin/IT role required" });
       }
 
       const parts = url.pathname.split("/");
@@ -1535,8 +1586,8 @@ export default {
     if (request.method === "POST" && /^\/v1\/cases\/[^/]+\/items\/[^/]+\/estimate-workbench$/.test(url.pathname)) {
       const auth = await requireAuth(request, env);
       if (auth.error) return auth.error;
-      if (!requireRole(auth.user, ["Admin", "IT", "Staff"])) {
-        return json(403, { code: "FORBIDDEN", message: "Role not allowed" });
+      if (!requireRole(auth.user, CASE_WRITE_ROLES)) {
+        return json(403, { code: "FORBIDDEN", message: "Admin/IT role required" });
       }
 
       const parts = url.pathname.split("/");
@@ -2088,8 +2139,8 @@ export default {
     if (request.method === "POST" && url.pathname === "/v1/estimates") {
       const auth = await requireAuth(request, env);
       if (auth.error) return auth.error;
-      if (!requireRole(auth.user, ["Admin", "IT", "Staff"])) {
-        return json(403, { code: "FORBIDDEN", message: "Role not allowed" });
+      if (!requireRole(auth.user, CASE_WRITE_ROLES)) {
+        return json(403, { code: "FORBIDDEN", message: "Admin/IT role required" });
       }
 
       let body;
@@ -2185,8 +2236,8 @@ export default {
     if (request.method === "POST" && /^\/v1\/estimates\/[^/]+\/decision$/.test(url.pathname)) {
       const auth = await requireAuth(request, env);
       if (auth.error) return auth.error;
-      if (!requireRole(auth.user, ["Admin", "IT", "Staff"])) {
-        return json(403, { code: "FORBIDDEN", message: "Role not allowed" });
+      if (!requireRole(auth.user, CASE_WRITE_ROLES)) {
+        return json(403, { code: "FORBIDDEN", message: "Admin/IT role required" });
       }
 
       const estimateId = url.pathname.split("/")[3];
@@ -2604,8 +2655,8 @@ export default {
     if (request.method === "POST" && url.pathname === "/v1/expenses") {
       const auth = await requireAuth(request, env);
       if (auth.error) return auth.error;
-      if (!requireRole(auth.user, ["Admin", "IT", "Staff"])) {
-        return json(403, { code: "FORBIDDEN", message: "Role not allowed" });
+      if (!requireRole(auth.user, ["Admin", "IT"])) {
+        return json(403, { code: "FORBIDDEN", message: "Admin/IT role required" });
       }
 
       let body;
@@ -2993,8 +3044,8 @@ export default {
     if (request.method === "POST" && /^\/v1\/followups\/cases\/[^/]+\/note$/.test(url.pathname)) {
       const auth = await requireAuth(request, env);
       if (auth.error) return auth.error;
-      if (!requireRole(auth.user, ["Admin", "IT", "Staff"])) {
-        return json(403, { code: "FORBIDDEN", message: "Role not allowed" });
+      if (!requireRole(auth.user, CASE_WRITE_ROLES)) {
+        return json(403, { code: "FORBIDDEN", message: "Admin/IT role required" });
       }
 
       const caseId = url.pathname.split("/")[4];
@@ -4646,5 +4697,26 @@ export default {
       code: "NOT_FOUND",
       message: "Route not found"
     });
+  },
+
+  async scheduled(event, env, ctx) {
+    const keepalivePromise = runSupabaseKeepalive(env, event)
+      .then((result) => {
+        if (result.ok) {
+          console.log(`SUPABASE_KEEPALIVE_OK cron=${result.cron || "unknown"} observed_at_utc=${result.observed_at_utc}`);
+          return;
+        }
+        console.warn(`SUPABASE_KEEPALIVE_FAILED code=${result.code} cron=${result.cron || "unknown"} message=${result.message || "unknown"}`);
+      })
+      .catch((error) => {
+        console.warn(`SUPABASE_KEEPALIVE_ERROR message=${error?.message || "unknown"}`);
+      });
+
+    if (ctx && typeof ctx.waitUntil === "function") {
+      ctx.waitUntil(keepalivePromise);
+      return;
+    }
+
+    await keepalivePromise;
   }
 };

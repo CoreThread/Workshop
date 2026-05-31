@@ -678,6 +678,12 @@ body.inventory-readonly .inventory-admin-hidden {
   display: none !important;
 }
 
+body.case-readonly textarea[readonly] {
+  background: var(--panel-soft);
+  color: var(--ink-2);
+  cursor: default;
+}
+
 body.basic-mode .archive-usage-actions {
   grid-template-columns: 1fr;
 }

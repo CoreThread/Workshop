@@ -23,8 +23,8 @@ function loadEnv(filePath) {
 loadEnv(envPath);
 
 const API_BASE = (process.env.WORKSHOP_SEED_API_BASE || process.env.WORKSHOP_LOCAL_API_BASE || "https://workshop-api.jaiswal-utkarshuj.workers.dev").replace(/\/$/, "");
-const EMAIL = process.env.WORKSHOP_ADMIN_EMAIL || "admin@rajeshelec.local";
-const PASSWORD = process.env.WORKSHOP_ADMIN_PASSWORD || "Admin@12345!";
+const EMAIL = process.env.WORKSHOP_SEED_EMAIL || process.env.WORKSHOP_ADMIN_EMAIL || "it@rajeshelec.local";
+const PASSWORD = process.env.WORKSHOP_SEED_PASSWORD || process.env.WORKSHOP_ADMIN_PASSWORD || "Admin@12345!";
 const CASE_PREFIX = process.env.WORKSHOP_SEED_CASE_PREFIX || "AG";
 const START_NO = Math.max(1, Number(process.env.WORKSHOP_SEED_START_NO || "1"));
 const curatedCases = [
