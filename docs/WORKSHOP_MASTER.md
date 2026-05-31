@@ -50,6 +50,10 @@
 - Cloudflare Pages deploy command:
   - `wrangler pages deploy frontend --project-name re-workshop --branch main --commit-dirty=true`
 - Wrangler CLI: local and global installs verified at `4.95.0`; plain `wrangler` resolves from the user npm command folder in PowerShell.
+- Workshop PowerShell Node/Wrangler check:
+  - `Set-Location C:\Users\utkjaiswal\Desktop\Workshop\Workshop`
+  - `fnm use system`
+  - `wrangler --version`
 - Latest frontend preview verified in this session: `https://499349fc.re-workshop.pages.dev`
 
 ## Implementation Status
