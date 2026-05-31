@@ -26,6 +26,10 @@ const el = {
   whoamiTop: document.getElementById("whoamiTop"),
   setup: document.getElementById("setup"),
   appWorkspace: document.getElementById("appWorkspace"),
+  homeConsole: document.getElementById("homeConsole"),
+  caseDeskSurface: document.getElementById("caseDeskSurface"),
+  backHomeBtn: document.getElementById("backHomeBtn"),
+  caseSurfaceTitle: document.getElementById("caseSurfaceTitle"),
   sessionDock: document.getElementById("sessionDock"),
   loginGateHint: document.getElementById("loginGateHint"),
   lanePrimary: document.getElementById("lane-primary"),
@@ -50,6 +54,7 @@ const el = {
   quickInventoryBtn: document.getElementById("quickInventoryBtn"),
   quickAnalyticsBtn: document.getElementById("quickAnalyticsBtn"),
   quickHrBtn: document.getElementById("quickHrBtn"),
+  recentCasesList: document.getElementById("recentCasesList"),
   quickActionsHint: document.getElementById("quickActionsHint"),
   caseNo: document.getElementById("caseNo"),
   customerName: document.getElementById("customerName"),
@@ -68,8 +73,9 @@ const el = {
   statusCaseNo: document.getElementById("statusCaseNo"),
   statusHeaderStatus: document.getElementById("statusHeaderStatus"),
   statusItemId: document.getElementById("statusItemId"),
-  statusProgressBar: document.getElementById("statusProgressBar"),
-  statusProgressLabel: document.getElementById("statusProgressLabel"),
+  caseDetailSummary: document.getElementById("caseDetailSummary"),
+  caseNotes: document.getElementById("caseNotes"),
+  saveCaseNotesBtn: document.getElementById("saveCaseNotesBtn"),
   statusResult: document.getElementById("statusResult"),
   caseStatusItemsBoard: document.getElementById("caseStatusItemsBoard"),
   historyBtn: document.getElementById("historyBtn"),
@@ -79,6 +85,7 @@ const el = {
   loadFollowupsBtn: document.getElementById("loadFollowupsBtn"),
   followupResults: document.getElementById("followupResults"),
   followupCaseId: document.getElementById("followupCaseId"),
+  followupCaseNo: document.getElementById("followupCaseNo"),
   followupNote: document.getElementById("followupNote"),
   saveFollowupNoteBtn: document.getElementById("saveFollowupNoteBtn"),
   followupResult: document.getElementById("followupResult"),
@@ -87,6 +94,7 @@ const el = {
   loadDailyCloseBtn: document.getElementById("loadDailyCloseBtn"),
   dailyCloseResult: document.getElementById("dailyCloseResult"),
   estimateCaseId: document.getElementById("estimateCaseId"),
+  estimateCaseNo: document.getElementById("estimateCaseNo"),
   estimateItemId: document.getElementById("estimateItemId"),
   laborPaise: document.getElementById("laborPaise"),
   sparePaise: document.getElementById("sparePaise"),
@@ -129,17 +137,24 @@ const el = {
   confirmOverride: document.getElementById("confirmOverride"),
   confirmCreditNote: document.getElementById("confirmCreditNote"),
   phase5CaseId: document.getElementById("phase5CaseId"),
+  phase5CaseNo: document.getElementById("phase5CaseNo"),
   phase5CaseItemId: document.getElementById("phase5CaseItemId"),
   phase5InventoryItemId: document.getElementById("phase5InventoryItemId"),
   phase5SyncCaseBtn: document.getElementById("phase5SyncCaseBtn"),
+  inventoryEditId: document.getElementById("inventoryEditId"),
+  inventoryRoleChip: document.getElementById("inventoryRoleChip"),
+  inventorySummary: document.getElementById("inventorySummary"),
   inventorySku: document.getElementById("inventorySku"),
   inventoryName: document.getElementById("inventoryName"),
+  inventoryLocation: document.getElementById("inventoryLocation"),
   inventoryUom: document.getElementById("inventoryUom"),
   inventoryStockQty: document.getElementById("inventoryStockQty"),
   inventoryReorderQty: document.getElementById("inventoryReorderQty"),
   inventoryUnitCostPaise: document.getElementById("inventoryUnitCostPaise"),
   inventoryValuation: document.getElementById("inventoryValuation"),
+  inventoryActive: document.getElementById("inventoryActive"),
   createInventoryBtn: document.getElementById("createInventoryBtn"),
+  clearInventoryFormBtn: document.getElementById("clearInventoryFormBtn"),
   inventoryCreateResult: document.getElementById("inventoryCreateResult"),
   inventoryQuery: document.getElementById("inventoryQuery"),
   inventoryLowStockOnly: document.getElementById("inventoryLowStockOnly"),
@@ -238,11 +253,15 @@ const el = {
   phase9Result: document.getElementById("phase9Result")
 };
 
+const BASIC_FEATURE_MODE = true;
+
 el.apiBase.value = storage.apiBase;
+document.body.classList.toggle("basic-mode", BASIC_FEATURE_MODE);
 
 const phase5State = {
   lastConsumptionId: "",
-  selectedInventory: null
+  selectedInventory: null,
+  inventoryRows: []
 };
 
 const appState = {
@@ -261,15 +280,44 @@ const caseWorkflowState = {
   caseId: "",
   caseNo: "",
   headerStatus: "",
+  notes: "",
   items: [],
-  previewToStatus: "Diagnosis"
+  previewToStatus: "Diagnosis",
+  previewItemId: "",
+  estimateDrafts: {},
+  estimatePanelOpen: {}
 };
 
 const CASE_PANEL_ORDER = ["case-panel-create", "case-panel-status"];
 const CASE_ITEM_TERMINAL_STATUSES = new Set(["Delivered", "Cancelled"]);
-const CASE_STATUS_SEQUENCE = ["Received", "Diagnosis", "WaitingApproval", "ApprovedForRepair", "InRepair", "Ready", "Delivered", "Cancelled"];
+const CASE_STATUS_SEQUENCE = ["Received", "Diagnosis", "WaitingApproval", "ApprovedForRepair", "InRepair", "WaitingPart", "Ready", "OutForDelivery", "Delivered", "Cancelled"];
+const CASE_STATUS_ESTIMATE_WORKBENCH_STATUSES = new Set(["Diagnosis", "WaitingApproval", "ApprovedForRepair", "InRepair", "WaitingPart"]);
+const CASE_STATUS_TRANSITIONS = {
+  Received: ["Diagnosis", "Cancelled"],
+  Diagnosis: ["WaitingApproval", "ApprovedForRepair", "Cancelled"],
+  WaitingApproval: ["ApprovedForRepair", "RejectedByCustomer", "Cancelled"],
+  ApprovedForRepair: ["InRepair", "Cancelled"],
+  RejectedByCustomer: ["Cancelled"],
+  InRepair: ["WaitingPart", "Ready", "Cancelled"],
+  WaitingPart: ["InRepair", "Ready", "Cancelled"],
+  Ready: ["OutForDelivery", "Delivered", "Cancelled"],
+  OutForDelivery: ["Delivered", "Cancelled"],
+  Delivered: [],
+  Cancelled: []
+};
+const CASE_CLOSED_HEADER_STATUSES = new Set(["DeliveredAll"]);
+const ACTIVE_CASE_WARN_DAYS = 2;
+const ACTIVE_CASE_DANGER_DAYS = 3;
 
 const MOBILE_BREAKPOINT = 820;
+
+function getCurrentRole() {
+  return String(appState.currentRole || "").toUpperCase();
+}
+
+function canManageInventory() {
+  return ["ADMIN", "IT"].includes(getCurrentRole());
+}
 
 function setText(node, text) {
   node.textContent = text;
@@ -290,12 +338,445 @@ function renderInlineMessage(message, tone = "") {
   return `<p class="${classes.join(" ")}">${message}</p>`;
 }
 
+function getCustomerRecord(row = {}) {
+  const customerRaw = row.customers;
+  return Array.isArray(customerRaw) ? (customerRaw[0] || {}) : (customerRaw || {});
+}
+
+function setFollowupCaseContext(caseId = "", caseNo = "") {
+  el.followupCaseId.value = caseId || "";
+  if (el.followupCaseNo) el.followupCaseNo.value = caseNo || "";
+}
+
+const UI_LABEL_OVERRIDES = {
+  Diagnosis: "Checking",
+  ApprovedForRepair: "Repairing",
+  WaitingApproval: "Waiting Approval",
+  RejectedByCustomer: "Rejected",
+  InRepair: "Repairing",
+  WaitingPart: "Waiting Part",
+  OutForDelivery: "Delivery",
+  ReadyAll: "Ready",
+  PartiallyReady: "Partially Ready",
+  DeliveredAll: "Delivered"
+};
+
+function formatUiLabel(value, fallback = "NA") {
+  const raw = String(value || "").trim();
+  if (!raw) return fallback;
+  return UI_LABEL_OVERRIDES[raw] || raw.replace(/([a-z])([A-Z])/g, "$1 $2");
+}
+
+function getVisibleNextStatuses(currentStatus = "", allowedStatuses = []) {
+  if (!BASIC_FEATURE_MODE) return allowedStatuses;
+  return allowedStatuses.filter((status) => {
+    if (currentStatus === "Diagnosis" && status === "ApprovedForRepair") return false;
+    if (currentStatus === "Ready" && status === "OutForDelivery") return false;
+    if (status === "RejectedByCustomer") return false;
+    return true;
+  });
+}
+
+function formatStatusActionLabel(currentStatus = "", toStatus = "") {
+  if (currentStatus === "ApprovedForRepair" && toStatus === "InRepair") return "Start Repair";
+  return formatUiLabel(toStatus);
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function formatPaiseInline(value, fallback = "Rs 0.00") {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return `Rs ${paiseToRupees(parsed)}`;
+}
+
+function formatRupeesShort(value, fallback = "Rs 0.00") {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return `Rs ${parsed.toFixed(2)}`;
+}
+
+function paiseToRupeeInput(value, fallback = "0.00") {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
+  return (parsed / 100).toFixed(2);
+}
+
+function rupeeInputToPaise(value) {
+  const raw = String(value || "").trim().replace(/,/g, "");
+  if (!raw) return null;
+  if (!/^\d+(\.\d{0,2})?$/.test(raw)) return null;
+  const [wholePart, fractionPart = ""] = raw.split(".");
+  const whole = Number(wholePart);
+  if (!Number.isFinite(whole)) return null;
+  const fraction = Number((fractionPart + "00").slice(0, 2));
+  return whole * 100 + fraction;
+}
+
+function buildEmptyEstimatePartDraft() {
+  return {
+    part_name: "",
+    qty: "1",
+    unit_cost_rupees: "",
+    notes: ""
+  };
+}
+
+function toDraftPaiseString(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return "0";
+  return String(Math.trunc(parsed));
+}
+
+function toDraftQtyString(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return "1";
+  return String(parsed);
+}
+
+function buildEstimateDraftFromItem(row = {}) {
+  const latest = row.latest_estimate || {};
+  const parts = Array.isArray(latest.parts) && latest.parts.length
+    ? latest.parts.map((part) => ({
+      part_name: part.part_name || "",
+      qty: toDraftQtyString(part.qty),
+      unit_cost_rupees: paiseToRupeeInput(part.unit_cost_paise, "0.00"),
+      notes: part.notes || ""
+    }))
+    : [buildEmptyEstimatePartDraft()];
+
+  return {
+    labor_amount_rupees: paiseToRupeeInput(latest.labor_amount_paise, "0.00"),
+    other_amount_rupees: paiseToRupeeInput(latest.other_amount_paise, "0.00"),
+    discount_amount_rupees: paiseToRupeeInput(latest.discount_amount_paise, "0.00"),
+    gst_required: latest?.id ? Number(latest.gst_rate_bps ?? 0) > 0 : false,
+    parts,
+    dirty: false
+  };
+}
+
+function hydrateCaseStatusEstimateDrafts(rows = []) {
+  const prevOpen = caseWorkflowState.estimatePanelOpen || {};
+  const nextDrafts = {};
+  const nextOpen = {};
+  rows.forEach((row) => {
+    nextDrafts[row.id] = buildEstimateDraftFromItem(row);
+    if (prevOpen[row.id] !== undefined) {
+      nextOpen[row.id] = prevOpen[row.id];
+    }
+  });
+  caseWorkflowState.estimateDrafts = nextDrafts;
+  caseWorkflowState.estimatePanelOpen = nextOpen;
+}
+
+function ensureEstimateDraft(itemId, row = {}) {
+  if (!caseWorkflowState.estimateDrafts[itemId]) {
+    caseWorkflowState.estimateDrafts[itemId] = buildEstimateDraftFromItem(row);
+  }
+  return caseWorkflowState.estimateDrafts[itemId];
+}
+
+function getEstimateDraftPreviewParts(draft = {}) {
+  return (draft.parts || [])
+    .map((part) => {
+      const partName = String(part.part_name || "").trim();
+      const qty = Number(part.qty || 1);
+      const unitCostPaise = String(part.unit_cost_rupees || "").trim() ? rupeeInputToPaise(part.unit_cost_rupees) : null;
+      if (!partName || unitCostPaise === null || unitCostPaise < 0 || !Number.isFinite(qty) || qty <= 0) {
+        return null;
+      }
+      return {
+        ...part,
+        part_name: partName,
+        qty,
+        unit_cost_paise: unitCostPaise,
+        line_total_paise: Math.round(qty * unitCostPaise)
+      };
+    })
+    .filter(Boolean);
+}
+
+function getEstimateDraftTotals(draft = {}) {
+  const parts = getEstimateDraftPreviewParts(draft);
+  const spare = parts.reduce((sum, part) => sum + Number(part.line_total_paise || 0), 0);
+  const labor = Math.max(0, rupeeInputToPaise(draft.labor_amount_rupees || "0") ?? 0);
+  const other = Math.max(0, rupeeInputToPaise(draft.other_amount_rupees || "0") ?? 0);
+  const discount = Math.max(0, rupeeInputToPaise(draft.discount_amount_rupees || "0") ?? 0);
+  const gstRateBps = draft.gst_required === false ? 0 : 1800;
+  const base = Math.max(0, labor + spare + other - discount);
+  const gst = Math.max(0, Math.round((base * gstRateBps) / 10000));
+  return {
+    labor,
+    spare,
+    other,
+    discount,
+    base,
+    gst,
+    total: base + gst,
+    partCount: parts.length
+  };
+}
+
+function validateEstimateDraftForSubmit(itemId) {
+  const draft = ensureEstimateDraft(itemId);
+  const meaningfulRows = (draft.parts || []).filter((part) => {
+    return String(part.part_name || "").trim()
+      || String(part.qty || "").trim()
+      || String(part.unit_cost_paise || "").trim()
+      || String(part.notes || "").trim();
+  });
+
+  const normalizedParts = [];
+  for (const part of meaningfulRows) {
+    const partName = String(part.part_name || "").trim();
+    const qtyRaw = String(part.qty || "1").trim();
+    const unitCostRaw = String(part.unit_cost_rupees || "").trim();
+    const qty = Number(qtyRaw || "1");
+
+    if (!partName) {
+      return { error: "Each quoted part needs a part name." };
+    }
+    if (!Number.isFinite(qty) || qty <= 0) {
+      return { error: "Each quoted part needs a valid positive quantity." };
+    }
+    if (!unitCostRaw) {
+      return { error: "Each quoted part needs a rupee cost." };
+    }
+
+    const unitCostPaise = rupeeInputToPaise(unitCostRaw);
+    if (unitCostPaise === null || unitCostPaise < 0) {
+      return { error: "Quoted part costs must be valid rupee values with up to 2 decimals." };
+    }
+
+    normalizedParts.push({
+      part_name: partName,
+      qty,
+      unit_cost_paise: unitCostPaise,
+      notes: String(part.notes || "").trim() || undefined
+    });
+  }
+
+  const laborAmountPaise = Math.max(0, rupeeInputToPaise(draft.labor_amount_rupees || "0") ?? 0);
+  const otherAmountPaise = Math.max(0, rupeeInputToPaise(draft.other_amount_rupees || "0") ?? 0);
+  const discountAmountPaise = Math.max(0, rupeeInputToPaise(draft.discount_amount_rupees || "0") ?? 0);
+  const hasQuoteContent = normalizedParts.length > 0 || laborAmountPaise > 0 || otherAmountPaise > 0;
+
+  if (!hasQuoteContent) {
+    return { error: "Add at least one quoted part or a non-zero labor/other amount before saving the estimate." };
+  }
+
+  return {
+    data: {
+      labor_amount_paise: laborAmountPaise,
+      other_amount_paise: otherAmountPaise,
+      discount_amount_paise: discountAmountPaise,
+      gst_required: draft.gst_required !== false,
+      parts: normalizedParts
+    }
+  };
+}
+
+function shouldShowEstimateWorkbench(row = {}) {
+  return CASE_STATUS_ESTIMATE_WORKBENCH_STATUSES.has(row.item_status);
+}
+
+function getStatusGuidance(row = {}) {
+  const latest = row.latest_estimate || null;
+  if (row.item_status === "Diagnosis") {
+    return latest
+      ? "Diagnosis is ready. Revise the quote only if parts or cost changed, then send customer approval."
+      : "Finish diagnosis, add part lines with cost, then send for customer approval.";
+  }
+  if (row.item_status === "WaitingApproval") {
+    return "Customer decision is pending. Keep this item waiting until approval or rejection is confirmed.";
+  }
+  if (row.item_status === "ApprovedForRepair") {
+    return "Customer approved. Repair can start now; update item status as work begins.";
+  }
+  if (row.item_status === "InRepair") {
+    return "Repair is in progress. Move to Waiting Part only when parts or stock are blocking work.";
+  }
+  if (row.item_status === "WaitingPart") {
+    return "Parts are blocking repair. Move back to In Repair once parts are available.";
+  }
+  if (row.item_status === "Ready") {
+    return "Repair work is complete. Prepare handover or delivery next.";
+  }
+  if (row.item_status === "OutForDelivery") {
+    return "Item has left the workshop. Only mark delivered after handover is complete.";
+  }
+  if (row.item_status === "Received") {
+    return "Start with diagnosis for this item before quoting or repair.";
+  }
+  return "Update this item independently. Mixed case states are expected.";
+}
+
+function renderLatestEstimateSummary(row = {}) {
+  const latest = row.latest_estimate || null;
+  if (!latest) {
+    return `<span class="item-estimate-summary-chip">No saved quote yet</span>`;
+  }
+
+  const chips = [
+    `Quote v${latest.estimate_version_no || 1}`,
+    formatUiLabel(latest.estimate_status || "Draft"),
+    formatUiLabel(latest.decision || "Pending"),
+    formatPaiseInline(latest.invoice_total_paise || 0)
+  ];
+
+  return chips
+    .map((label) => `<span class="item-estimate-summary-chip">${escapeHtml(label)}</span>`)
+    .join("");
+}
+
+function getCaseAgeMs(row = {}) {
+  const rawDate = row.received_at_utc || row.created_at || "";
+  const parsed = rawDate ? new Date(rawDate) : null;
+  if (!parsed || Number.isNaN(parsed.getTime())) return 0;
+  return Math.max(0, Date.now() - parsed.getTime());
+}
+
+function getCaseAgeDays(row = {}) {
+  return Math.floor(getCaseAgeMs(row) / (24 * 60 * 60 * 1000));
+}
+
+function getCaseAgeLabel(row = {}) {
+  const days = getCaseAgeDays(row);
+  if (days <= 0) return "Today";
+  if (days === 1) return "1 day open";
+  return `${days} days open`;
+}
+
+function getCaseAgeTone(row = {}) {
+  const days = getCaseAgeDays(row);
+  if (days > ACTIVE_CASE_DANGER_DAYS) return "danger";
+  if (days >= ACTIVE_CASE_WARN_DAYS) return "warn";
+  return "normal";
+}
+
+function isOpenCase(row = {}) {
+  return !CASE_CLOSED_HEADER_STATUSES.has(row.header_status || "");
+}
+
+function renderRecentCases(rows = []) {
+  if (!el.recentCasesList) return;
+  const activeRows = rows
+    .filter(isOpenCase)
+    .sort((a, b) => getCaseAgeMs(b) - getCaseAgeMs(a));
+
+  if (!activeRows.length) {
+    el.recentCasesList.innerHTML = "<p class='hint'>No active cases.</p>";
+    return;
+  }
+
+  const visibleRows = activeRows.slice(0, 12);
+  const countLabel = `${activeRows.length} active case${activeRows.length === 1 ? "" : "s"}`;
+
+  el.recentCasesList.innerHTML = `
+    <div class="active-cases-count"><strong>${countLabel}</strong></div>
+    <div class="active-cases-rows">
+      ${visibleRows
+    .map((row) => {
+      const customer = getCustomerRecord(row);
+      const caseNo = row.case_no || "Unknown";
+      const status = formatUiLabel(row.header_status || "NA");
+      const customerName = customer.name || "Unknown customer";
+      const tone = getCaseAgeTone(row);
+      return `<button type="button" class="active-case-row use-case-btn age-${tone}" data-case-id="${row.id}" data-case-no="${escapeHtml(caseNo)}">
+        <span class="active-case-main"><strong>${escapeHtml(caseNo)}</strong><span>${escapeHtml(customerName)}</span></span>
+        <span class="active-case-meta"><span>${escapeHtml(status)}</span><span>${escapeHtml(getCaseAgeLabel(row))}</span></span>
+      </button>`;
+    })
+    .join("")}
+    </div>
+  `;
+}
+
+function isEstimatePanelOpen(itemId, row = {}) {
+  if (caseWorkflowState.estimatePanelOpen[itemId] !== undefined) {
+    return caseWorkflowState.estimatePanelOpen[itemId];
+  }
+  return !row.latest_estimate && ["Diagnosis", "WaitingApproval"].includes(row.item_status);
+}
+
+async function loadRecentCases() {
+  if (!storage.token) {
+    renderRecentCases([]);
+    return;
+  }
+
+  try {
+    const result = await api("/v1/cases?limit=100", { method: "GET" });
+    renderRecentCases(result.data || []);
+  } catch (error) {
+    if (!el.recentCasesList) return;
+    el.recentCasesList.innerHTML = renderInlineMessage(`Unable to load active cases: ${error.message}`, "is-error");
+  }
+}
+
+async function openCaseStatusWorkspace(caseId, caseNo = "", options = {}) {
+  const { successMessage = "", shouldScroll = true } = options;
+  if (!caseId) return;
+
+  caseWorkflowState.caseId = caseId;
+  caseWorkflowState.caseNo = caseNo || caseWorkflowState.caseNo || "";
+  el.statusCaseId.value = caseId;
+  if (el.statusCaseNo) el.statusCaseNo.value = caseWorkflowState.caseNo;
+  syncOperationalContextFromCase();
+
+  showCaseSurface("case-panel-status", { scroll: false });
+
+  await loadCaseWorkflowContext(caseId, { silent: true });
+
+  if (successMessage) {
+    setFeedback(el.statusResult, successMessage, "success");
+  }
+
+  if (shouldScroll) {
+    el.caseDeskSurface?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
+
 function setFeedback(node, message, tone = "info") {
   if (!node) return;
   node.textContent = message || "";
   node.classList.remove("is-error", "is-success");
   if (tone === "error") node.classList.add("is-error");
   if (tone === "success") node.classList.add("is-success");
+}
+
+function sanitizeUiPayload(value, fallbackCaseNo = "") {
+  if (Array.isArray(value)) {
+    return value.map((entry) => sanitizeUiPayload(entry, fallbackCaseNo));
+  }
+
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const scopedCaseNo = value.case_no || fallbackCaseNo || caseWorkflowState.caseNo || el.followupCaseNo?.value || el.estimateCaseNo?.value || el.phase5CaseNo?.value || "";
+  const next = {};
+
+  Object.entries(value).forEach(([key, entryValue]) => {
+    if (key === "case_id") {
+      if (scopedCaseNo) next.case_no = scopedCaseNo;
+      return;
+    }
+    if (key === "source_case_id") {
+      if (scopedCaseNo) next.source_case_no = scopedCaseNo;
+      return;
+    }
+    next[key] = sanitizeUiPayload(entryValue, scopedCaseNo);
+  });
+
+  return next;
 }
 
 async function withButtonBusy(button, label, task) {
@@ -347,7 +828,7 @@ function formatUiError(action, rawMessage) {
 
   if (action === "search_cases") return message || "Unable to search cases right now.";
   if (action === "create_case") return message || "Unable to create case. Please review inputs and retry.";
-  if (action === "load_case_context") return message || "Unable to load case details. Verify Case ID and retry.";
+  if (action === "load_case_context") return message || "Unable to load case details. Reopen the case from search, follow-up, or recent cases and retry.";
   if (action === "update_case_status") return message || "Unable to update case item status.";
 
   return message || "Something went wrong. Please retry.";
@@ -389,9 +870,9 @@ function applyLoginGate() {
 
   if (!el.loginGateHint) return;
   if (loggedIn) {
-    setText(el.loginGateHint, "Workspace unlocked. Use Quick Actions to move between work areas.");
+    setText(el.loginGateHint, "Workspace unlocked.");
   } else {
-    setText(el.loginGateHint, "Login required to open operational lanes.");
+    setText(el.loginGateHint, "Login required to open the workspace.");
   }
 }
 
@@ -401,6 +882,90 @@ function setDisabled(node, shouldDisable, reason = "") {
   node.classList.toggle("is-disabled", shouldDisable);
   if (reason) node.title = reason;
   else node.removeAttribute("title");
+}
+
+function getCaseSurfaceTitle(panelId) {
+  if (panelId === "case-panel-search") return "Find Case Details";
+  if (panelId === "case-panel-status") return "Case Details";
+  return "New Case";
+}
+
+function syncCaseSurfaceTitle(panelId) {
+  setText(el.caseSurfaceTitle, getCaseSurfaceTitle(panelId));
+}
+
+function showHomeConsole(options = {}) {
+  const { scroll = true } = options;
+  setHidden(el.homeConsole, false);
+  setHidden(el.caseDeskSurface, true);
+  if (scroll) {
+    el.homeConsole?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
+
+function showCaseSurface(panelId, options = {}) {
+  const { scroll = true } = options;
+  setHidden(el.homeConsole, true);
+  setHidden(el.caseDeskSurface, false);
+  activateLane("lane-primary", { scroll: false });
+  setPrimaryModuleActive("module-case", { scroll: false });
+  setActiveCasePanel(panelId);
+  syncCaseSurfaceTitle(panelId);
+  if (scroll) {
+    el.caseDeskSurface?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
+
+function showInventorySurface(options = {}) {
+  const { scroll = true } = options;
+  setHidden(el.homeConsole, true);
+  setHidden(el.caseDeskSurface, false);
+  activateLane("lane-inventory", { scroll: false });
+  document.querySelector("#lane-inventory details")?.setAttribute("open", "");
+  syncCaseSurfaceTitle("inventory");
+  setText(el.caseSurfaceTitle, "Inventory");
+  if (scroll) {
+    el.caseDeskSurface?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
+
+function applyFeatureModeOverrides() {
+  document.body.classList.toggle("basic-mode", BASIC_FEATURE_MODE);
+  if (!BASIC_FEATURE_MODE) return;
+
+  [
+    document.querySelector(".quick-actions-group-collapsible"),
+    el.quickLoadFollowupsBtn,
+    el.quickRunDailyCloseBtn,
+    el.quickLoadArchiveIndexBtn,
+    el.quickBillingBtn,
+    el.quickAnalyticsBtn,
+    el.quickHrBtn,
+    el.moduleFollowup,
+    el.moduleArchive,
+    el.laneAnalytics,
+    el.laneHr,
+    el.moduleBilling
+  ].forEach((node) => setHidden(node, true));
+
+  if (el.moduleCase) el.moduleCase.open = true;
+}
+
+function syncInventoryPermissions() {
+  const canManage = canManageInventory();
+  document.body.classList.toggle("inventory-readonly", !canManage);
+  document.querySelectorAll(".inventory-admin-hidden").forEach((node) => setHidden(node, !canManage));
+  if (el.inventoryRoleChip) {
+    setText(el.inventoryRoleChip, canManage ? "Admin / IT Update" : "Staff Check");
+  }
+}
+
+function finalizeVisibility() {
+  applyFeatureModeOverrides();
+  syncInventoryPermissions();
+  applyLoginGate();
+  syncLaneWithRoleVisibility();
+  syncPrimaryModuleWithRoleVisibility();
 }
 
 function wireButtonClickEffects() {
@@ -523,116 +1088,109 @@ function getCaseItemCompletion(items = []) {
   };
 }
 
-function getStatusBucket(status) {
-  if (["Delivered", "Cancelled"].includes(status)) return "Completed";
-  if (status === "Ready") return "Ready";
-  if (status === "InRepair") return "In Repair";
-  return "Pending";
+function getStatusCounts(items = []) {
+  return CASE_STATUS_SEQUENCE.reduce((acc, status) => {
+    acc[status] = items.filter((row) => row.item_status === status).length;
+    return acc;
+  }, {});
 }
 
-function renderStatusProgressBar(toStatus = "") {
-  if (!el.statusProgressBar) return;
-  const target = CASE_STATUS_SEQUENCE.includes(toStatus) ? toStatus : caseWorkflowState.previewToStatus;
-  const targetIndex = Math.max(0, CASE_STATUS_SEQUENCE.indexOf(target));
+function getCaseItemLineLabel(row = {}, index = 0) {
+  const lineNo = Number(row.line_no);
+  if (Number.isFinite(lineNo) && lineNo > 0) return String(lineNo);
+  return caseItemLabelFromIndex(Math.max(0, index));
+}
 
-  el.statusProgressBar.innerHTML = CASE_STATUS_SEQUENCE
-    .map((status, index) => {
-      const classes = ["status-step"];
-      if (index <= targetIndex) classes.push("done");
-      if (status === target) classes.push("target");
-      return `<div class="${classes.join(" ")}">${status}</div>`;
-    })
-    .join("");
+function renderCaseDetailSummary() {
+  const rows = caseWorkflowState.items || [];
+  const counts = getStatusCounts(rows);
 
-  const completion = getCaseItemCompletion(caseWorkflowState.items);
-  if (el.statusProgressLabel) {
-    const caseNo = caseWorkflowState.caseNo || "Not selected";
-    el.statusProgressLabel.textContent = `Case: ${caseNo} | Header: ${caseWorkflowState.headerStatus || "NA"} | To Status: ${target} | Completed Items: ${completion.completed}/${completion.total}`;
+  const bannerId = document.getElementById("statusBannerCaseNo");
+  const bannerStatus = document.getElementById("statusBannerHeaderStatus");
+  if (bannerId) bannerId.textContent = caseWorkflowState.caseNo || "—";
+  if (bannerStatus) bannerStatus.textContent = formatUiLabel(caseWorkflowState.headerStatus || "—");
+
+  if (!el.caseDetailSummary) return;
+  if (!rows.length) {
+    el.caseDetailSummary.innerHTML = "<span>Open a case to view item status.</span>";
+    return;
   }
+
+  const openCount = rows.filter((row) => !CASE_ITEM_TERMINAL_STATUSES.has(row.item_status)).length;
+  const visibleStatusCounts = CASE_STATUS_SEQUENCE.reduce((acc, status) => {
+    const count = counts[status] || 0;
+    if (!count) return acc;
+    const label = formatUiLabel(status);
+    acc[label] = (acc[label] || 0) + count;
+    return acc;
+  }, {});
+  const statusText = Object.entries(visibleStatusCounts)
+    .map(([label, count]) => `${label} ${count}`)
+    .join(" · ");
+  const itemText = `${rows.length} item${rows.length === 1 ? "" : "s"}`;
+  const openText = `${openCount} open`;
+
+  el.caseDetailSummary.innerHTML = `
+    <span>${escapeHtml(itemText)}</span>
+    <span>${escapeHtml(openText)}</span>
+    ${statusText ? `<span>${escapeHtml(statusText)}</span>` : ""}
+  `;
 }
 
 function renderCaseStatusItemsBoard() {
   if (!el.caseStatusItemsBoard) return;
   const rows = caseWorkflowState.items || [];
   if (!rows.length) {
-    el.caseStatusItemsBoard.innerHTML = "<p class='hint'>Load a case to view item-wise status updates.</p>";
-    renderStatusProgressBar(caseWorkflowState.previewToStatus);
+    el.caseStatusItemsBoard.innerHTML = "<p class='hint'>Open a case from New Case, Find Case, or Recent Cases.</p>";
+    renderCaseDetailSummary();
     return;
   }
 
-  const buckets = ["Pending", "In Repair", "Ready", "Completed"];
-  const byBucket = {
-    Pending: [],
-    "In Repair": [],
-    Ready: [],
-    Completed: []
-  };
+  el.caseStatusItemsBoard.innerHTML = rows
+    .map((row, index) => {
+        const allowedStatuses = getVisibleNextStatuses(row.item_status, CASE_STATUS_TRANSITIONS[row.item_status] || []);
+        const primaryStatuses = allowedStatuses.filter((s) => s !== "Cancelled" && s !== "RejectedByCustomer");
+        const secondaryStatuses = allowedStatuses.filter((s) => s === "Cancelled" || s === "RejectedByCustomer");
 
-  rows.forEach((row) => {
-    byBucket[getStatusBucket(row.item_status)].push(row);
-  });
+        const primaryButtons = primaryStatuses.map((status, index) => {
+          const toneClass = index === 0 ? "accent" : "ghost";
+          return `<button type="button" class="${toneClass} row-status-action-btn" data-status-item-id="${row.id}" data-to-status="${status}">${escapeHtml(formatStatusActionLabel(row.item_status, status))}</button>`;
+        }).join("");
 
-  const statusOptions = CASE_STATUS_SEQUENCE
-    .filter((status) => status !== "Received")
-    .map((status) => `<option value="${status}">${status}</option>`)
-    .join("");
+        const secondaryButtons = secondaryStatuses.length
+          ? `<div class="status-secondary-actions">${secondaryStatuses.map((status) => `<button type="button" class="ghost status-secondary-btn row-status-action-btn" data-status-item-id="${row.id}" data-to-status="${status}">${escapeHtml(formatStatusActionLabel(row.item_status, status))}</button>`).join("")}</div>`
+          : "";
 
-  el.caseStatusItemsBoard.innerHTML = buckets
-    .map((bucket) => {
-      const bucketRows = byBucket[bucket] || [];
-      if (!bucketRows.length) return "";
+        const statusActionButtons = allowedStatuses.length
+          ? primaryButtons + secondaryButtons
+          : `<span class="status-terminal-label">Final status reached</span>`;
 
-      const tableRows = bucketRows
-        .map((row) => {
-          return `
-            <tr data-status-item-id="${row.id}">
-                <td data-label="Item">${row.line_no || "-"}</td>
-                <td data-label="Category">${row.item_category || "NA"}</td>
-                <td data-label="Issue">${row.reported_issue || "NA"}</td>
-                <td data-label="Current">${row.item_status || "NA"}</td>
-                <td data-label="To Status">
-                <select class="row-to-status" data-status-item-id="${row.id}">
-                  ${statusOptions}
-                </select>
-              </td>
-                <td data-label="Note">
-                <input class="row-status-note" data-status-item-id="${row.id}" placeholder="optional note" />
-              </td>
-                <td data-label="Action">
-                <button type="button" class="accent row-update-item-status" data-status-item-id="${row.id}">Update</button>
-              </td>
-            </tr>
-          `;
-        })
-        .join("");
+        const metaChips = [row.brand, row.model, row.serial_no]
+          .filter((value) => String(value || "").trim())
+          .map((value) => `<span class="case-status-meta-chip">${escapeHtml(value)}</span>`)
+          .join("");
 
-      return `
-        <section class="case-status-group">
-          <h4>${bucket}</h4>
-          <div class="case-status-table-wrap">
-            <table class="case-status-table">
-              <thead>
-                <tr>
-                  <th>Item</th>
-                  <th>Category</th>
-                  <th>Issue</th>
-                  <th>Current</th>
-                  <th>To Status</th>
-                  <th>Note</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${tableRows}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      `;
-    })
-    .join("");
+        const isTerminal = CASE_ITEM_TERMINAL_STATUSES.has(row.item_status);
 
-  renderStatusProgressBar(caseWorkflowState.previewToStatus);
+        return `
+          <article class="case-status-item-card ${isTerminal ? 'is-terminal' : ''}" data-status-item-id="${row.id}">
+            <div class="case-status-item-head">
+              <div class="case-status-item-head-left">
+                <span class="case-status-item-eyebrow">${escapeHtml(getCaseItemLineLabel(row, index))}. ${escapeHtml((row.item_category || "NA").toUpperCase())}</span>
+                <span class="case-status-item-title">${escapeHtml(row.reported_issue || "No issue noted")}</span>
+              </div>
+              <span class="case-status-item-status">${escapeHtml(formatUiLabel(row.item_status || "NA"))}</span>
+            </div>
+            ${metaChips ? `<div class="case-status-item-meta">${metaChips}</div>` : ''}
+            ${!isTerminal ? `<div class="case-status-item-actions">
+              <div class="case-status-next-actions">${statusActionButtons}</div>
+            </div>` : ''}
+          </article>
+        `;
+      })
+      .join("");
+
+  renderCaseDetailSummary();
 }
 
 function pickPreferredCaseItem(rows = [], preferredItemId = "") {
@@ -646,6 +1204,7 @@ function pickPreferredCaseItem(rows = [], preferredItemId = "") {
 
 function applySelectedCaseItem(itemId) {
   if (!itemId) return;
+  caseWorkflowState.previewItemId = itemId;
   el.statusItemId.value = itemId;
   syncOperationalContextFromCase();
 }
@@ -654,30 +1213,35 @@ async function loadCaseWorkflowContext(caseId, options = {}) {
   const { preferredItemId = "", silent = false } = options;
   const normalizedCaseId = String(caseId || "").trim();
   if (!normalizedCaseId) {
-    if (!silent) setText(el.statusResult, "Enter Case ID first, then refresh case details.");
+    if (!silent) setText(el.statusResult, "Open a case first.");
     return;
   }
 
   try {
-    const [caseResult, itemResult] = await Promise.all([
-      api(`/v1/cases/${normalizedCaseId}`, { method: "GET" }),
-      api(`/v1/cases/${normalizedCaseId}/items`, { method: "GET" })
-    ]);
-
-    const rows = Array.isArray(itemResult?.data) ? itemResult.data : [];
+    const workbenchResult = await api(`/v1/cases/${normalizedCaseId}/status-workbench`, { method: "GET" });
+    const caseData = workbenchResult?.data?.case || {};
+    const rows = Array.isArray(workbenchResult?.data?.items) ? workbenchResult.data.items : [];
     caseWorkflowState.caseId = normalizedCaseId;
-    caseWorkflowState.caseNo = caseResult?.data?.case_no || "";
-    caseWorkflowState.headerStatus = caseResult?.data?.header_status || "";
+    caseWorkflowState.caseNo = caseData.case_no || "";
+    caseWorkflowState.headerStatus = caseData.header_status || "";
+    caseWorkflowState.notes = caseData.notes || "";
     caseWorkflowState.items = rows;
+    hydrateCaseStatusEstimateDrafts(rows);
 
     el.statusCaseId.value = normalizedCaseId;
+    if (el.caseNotes) el.caseNotes.value = caseWorkflowState.notes;
     if (el.statusCaseNo) el.statusCaseNo.value = caseWorkflowState.caseNo || "";
-    if (el.statusHeaderStatus) el.statusHeaderStatus.value = caseWorkflowState.headerStatus || "";
+    if (el.statusHeaderStatus) el.statusHeaderStatus.value = formatUiLabel(caseWorkflowState.headerStatus || "", "");
+    const bannerId = document.getElementById("statusBannerCaseNo");
+    const bannerStatus = document.getElementById("statusBannerHeaderStatus");
+    if (bannerId) bannerId.textContent = caseWorkflowState.caseNo || "—";
+    if (bannerStatus) bannerStatus.textContent = formatUiLabel(caseWorkflowState.headerStatus || "—");
 
     const itemIdToUse = pickPreferredCaseItem(rows, preferredItemId || el.statusItemId.value.trim());
     if (itemIdToUse) {
       applySelectedCaseItem(itemIdToUse);
     } else {
+      caseWorkflowState.previewItemId = "";
       el.statusItemId.value = "";
       syncOperationalContextFromCase();
     }
@@ -698,10 +1262,21 @@ function resetCaseWorkflowState() {
   caseWorkflowState.caseId = "";
   caseWorkflowState.caseNo = "";
   caseWorkflowState.headerStatus = "";
+  caseWorkflowState.notes = "";
   caseWorkflowState.items = [];
+  caseWorkflowState.previewItemId = "";
+  caseWorkflowState.estimateDrafts = {};
+  caseWorkflowState.estimatePanelOpen = {};
   if (el.statusCaseNo) el.statusCaseNo.value = "";
   if (el.statusHeaderStatus) el.statusHeaderStatus.value = "";
   el.statusItemId.value = "";
+  if (el.estimateCaseId) el.estimateCaseId.value = "";
+  if (el.estimateCaseNo) el.estimateCaseNo.value = "";
+  if (el.phase5CaseId) el.phase5CaseId.value = "";
+  if (el.phase5CaseNo) el.phase5CaseNo.value = "";
+  if (el.phase5CaseItemId) el.phase5CaseItemId.value = "";
+  if (el.phase5InventoryItemId) el.phase5InventoryItemId.value = "";
+  if (el.caseNotes) el.caseNotes.value = "";
   if (el.historyTimeline) el.historyTimeline.innerHTML = "";
   renderCaseStatusItemsBoard();
 }
@@ -709,14 +1284,15 @@ function resetCaseWorkflowState() {
 function updateCaseModuleChrome(panelId) {
   const isCreatePanel = panelId === "case-panel-create";
   setHidden(el.caseWorkflowChrome, !isCreatePanel);
+  syncCaseSurfaceTitle(panelId);
 
   if (el.moduleCaseSummary) {
     if (panelId === "case-panel-search") {
-      el.moduleCaseSummary.textContent = "Search Existing Cases";
+      el.moduleCaseSummary.textContent = "Find Case Details";
     } else if (panelId === "case-panel-status") {
-      el.moduleCaseSummary.textContent = "Case Status Workspace";
+      el.moduleCaseSummary.textContent = "Case Details";
     } else {
-      el.moduleCaseSummary.textContent = "Case Intake + Status (Phase 2)";
+      el.moduleCaseSummary.textContent = "New Case";
     }
   }
 }
@@ -750,7 +1326,7 @@ function setActiveCasePanel(panelId) {
   });
 
   if (targetPanel.id === "case-panel-status") {
-    renderStatusProgressBar(caseWorkflowState.previewToStatus);
+    renderCaseDetailSummary();
   }
 }
 
@@ -849,9 +1425,7 @@ function applyRoleView() {
     if (el.quickActionsHint) {
       setText(el.quickActionsHint, "Use Quick Actions as the main navigation once you log in. Role visibility is applied after login.");
     }
-    applyLoginGate();
-    syncLaneWithRoleVisibility();
-    syncPrimaryModuleWithRoleVisibility();
+    finalizeVisibility();
     return;
   }
 
@@ -864,10 +1438,8 @@ function applyRoleView() {
     setHidden(el.quickAnalyticsBtn, false);
     setHidden(el.quickBillingBtn, false);
     setDisabled(el.quickLoadArchiveIndexBtn, false);
-    if (el.quickActionsHint) setText(el.quickActionsHint, "Admin mode: all quick actions and lanes are available.");
-    applyLoginGate();
-    syncLaneWithRoleVisibility();
-    syncPrimaryModuleWithRoleVisibility();
+    if (el.quickActionsHint) setText(el.quickActionsHint, "Admin mode: all quick actions and work areas are available.");
+    finalizeVisibility();
     return;
   }
 
@@ -881,9 +1453,7 @@ function applyRoleView() {
     setHidden(el.quickBillingBtn, false);
     setDisabled(el.quickLoadArchiveIndexBtn, false);
     if (el.quickActionsHint) setText(el.quickActionsHint, "IT mode: HR is hidden. Core, archive, billing, inventory, and analytics remain available.");
-    applyLoginGate();
-    syncLaneWithRoleVisibility();
-    syncPrimaryModuleWithRoleVisibility();
+    finalizeVisibility();
     return;
   }
 
@@ -899,18 +1469,14 @@ function applyRoleView() {
     if (el.quickActionsHint) {
       setText(el.quickActionsHint, "Staff mode: Quick Actions stay focused on case flow, follow-ups, daily close, and inventory.");
     }
-    applyLoginGate();
-    syncLaneWithRoleVisibility();
-    syncPrimaryModuleWithRoleVisibility();
+    finalizeVisibility();
     return;
   }
 
   if (el.quickActionsHint) {
     setText(el.quickActionsHint, `Role ${role}: default visibility applied.`);
   }
-  applyLoginGate();
-  syncLaneWithRoleVisibility();
-  syncPrimaryModuleWithRoleVisibility();
+  finalizeVisibility();
 }
 
 function setCompactMobileMode() {
@@ -1056,7 +1622,7 @@ function computePreview() {
 }
 
 function setPhase4Result(payload) {
-  el.phase4Result.textContent = JSON.stringify(payload, null, 2);
+  el.phase4Result.textContent = JSON.stringify(sanitizeUiPayload(payload), null, 2);
 }
 
 async function refreshEstimateSnapshotSilently(actionTag = "refresh_estimate") {
@@ -1108,16 +1674,22 @@ function syncPhase4ContextFromCase() {
   if (el.statusCaseId.value.trim()) {
     el.estimateCaseId.value = el.statusCaseId.value.trim();
   }
+  if (el.estimateCaseNo) {
+    el.estimateCaseNo.value = caseWorkflowState.caseNo || "";
+  }
   if (el.statusItemId.value.trim()) {
     el.estimateItemId.value = el.statusItemId.value.trim();
   }
 }
 
 function syncPhase5ContextFromCase() {
-  if (el.statusCaseId.value.trim()) {
+  if (el.phase5CaseId && el.statusCaseId.value.trim()) {
     el.phase5CaseId.value = el.statusCaseId.value.trim();
   }
-  if (el.statusItemId.value.trim()) {
+  if (el.phase5CaseNo) {
+    el.phase5CaseNo.value = caseWorkflowState.caseNo || "";
+  }
+  if (el.phase5CaseItemId && el.statusItemId.value.trim()) {
     el.phase5CaseItemId.value = el.statusItemId.value.trim();
   }
 }
@@ -1128,40 +1700,43 @@ function syncOperationalContextFromCase() {
 }
 
 function setPhase5Result(payload) {
-  el.phase5Result.textContent = JSON.stringify(payload, null, 2);
+  if (!el.phase5Result) return;
+  el.phase5Result.textContent = JSON.stringify(sanitizeUiPayload(payload), null, 2);
 }
 
 function setPhase5LedgerResult(payload) {
-  el.phase5LedgerResult.textContent = JSON.stringify(payload, null, 2);
+  if (!el.phase5LedgerResult) return;
+  el.phase5LedgerResult.textContent = JSON.stringify(sanitizeUiPayload(payload), null, 2);
 }
 
 function setPhase5CorrectionResult(payload) {
-  el.phase5CorrectionResult.textContent = JSON.stringify(payload, null, 2);
+  if (!el.phase5CorrectionResult) return;
+  el.phase5CorrectionResult.textContent = JSON.stringify(sanitizeUiPayload(payload), null, 2);
 }
 
 function setPhase5SmokePayloadResult(payload) {
   if (!el.phase5SmokePayloadResult) return;
-  el.phase5SmokePayloadResult.textContent = JSON.stringify(payload, null, 2);
+  el.phase5SmokePayloadResult.textContent = JSON.stringify(sanitizeUiPayload(payload), null, 2);
 }
 
 function setPhase6Result(payload) {
   if (!el.phase6Result) return;
-  el.phase6Result.textContent = JSON.stringify(payload, null, 2);
+  el.phase6Result.textContent = JSON.stringify(sanitizeUiPayload(payload), null, 2);
 }
 
 function setArchiveAdminResult(payload) {
   if (!el.archiveAdminResult) return;
-  el.archiveAdminResult.textContent = JSON.stringify(payload, null, 2);
+  el.archiveAdminResult.textContent = JSON.stringify(sanitizeUiPayload(payload), null, 2);
 }
 
 function setPhase8Result(payload) {
   if (!el.phase8Result) return;
-  el.phase8Result.textContent = JSON.stringify(payload, null, 2);
+  el.phase8Result.textContent = JSON.stringify(sanitizeUiPayload(payload), null, 2);
 }
 
 function setPhase9Result(payload) {
   if (!el.phase9Result) return;
-  el.phase9Result.textContent = JSON.stringify(payload, null, 2);
+  el.phase9Result.textContent = JSON.stringify(sanitizeUiPayload(payload), null, 2);
 }
 
 function metricCard(label, value) {
@@ -1309,6 +1884,7 @@ function setPhase5StockWarning(message, tone = "") {
 }
 
 function updatePhase5StockWarning() {
+  if (!el.phase5StockWarning || !el.consumeQty) return;
   const inv = phase5State.selectedInventory;
   if (!inv) {
     setPhase5StockWarning("Select inventory item to preview stock guard checks.");
@@ -1337,7 +1913,62 @@ function updatePhase5StockWarning() {
   setPhase5StockWarning(`Projected stock after consume: ${projected}. Within safe range.`, "ok");
 }
 
+function getInventoryLocation(row = {}) {
+  return row.storage_location || row.location || row.place || row.rack || "Not set";
+}
+
+function resetInventoryForm() {
+  if (el.inventoryEditId) el.inventoryEditId.value = "";
+  if (el.phase5InventoryItemId) el.phase5InventoryItemId.value = "";
+  if (el.inventorySku) el.inventorySku.value = "";
+  if (el.inventoryName) el.inventoryName.value = "";
+  if (el.inventoryLocation) el.inventoryLocation.value = "";
+  if (el.inventoryUom) el.inventoryUom.value = "pcs";
+  if (el.inventoryStockQty) el.inventoryStockQty.value = "0";
+  if (el.inventoryReorderQty) el.inventoryReorderQty.value = "5";
+  if (el.inventoryUnitCostPaise) el.inventoryUnitCostPaise.value = "1500";
+  if (el.inventoryValuation) el.inventoryValuation.value = "WEIGHTED_AVERAGE";
+  if (el.inventoryActive) el.inventoryActive.value = "true";
+  if (el.createInventoryBtn) setText(el.createInventoryBtn, "Save Inventory");
+  setFeedback(el.inventoryCreateResult, "", "info");
+}
+
+function hydrateInventoryForm(row = {}) {
+  if (!row?.id) return;
+  if (el.inventoryEditId) el.inventoryEditId.value = row.id;
+  if (el.phase5InventoryItemId) el.phase5InventoryItemId.value = row.id;
+  if (el.inventorySku) el.inventorySku.value = row.sku || "";
+  if (el.inventoryName) el.inventoryName.value = row.item_name || "";
+  if (el.inventoryLocation) el.inventoryLocation.value = getInventoryLocation(row) === "Not set" ? "" : getInventoryLocation(row);
+  if (el.inventoryUom) el.inventoryUom.value = row.uom || "pcs";
+  if (el.inventoryStockQty) el.inventoryStockQty.value = String(row.current_stock_qty ?? "0");
+  if (el.inventoryReorderQty) el.inventoryReorderQty.value = String(row.reorder_level_qty ?? "0");
+  if (el.inventoryUnitCostPaise) el.inventoryUnitCostPaise.value = String(row.default_unit_cost_paise ?? "0");
+  if (el.inventoryValuation) el.inventoryValuation.value = row.valuation_method || "WEIGHTED_AVERAGE";
+  if (el.inventoryActive) el.inventoryActive.value = row.is_active === false ? "false" : "true";
+  if (el.createInventoryBtn) setText(el.createInventoryBtn, "Update Inventory");
+  setFeedback(el.inventoryCreateResult, `Editing ${row.item_name || row.sku || "selected item"}.`, "info");
+}
+
+function renderInventorySummary(items = []) {
+  if (!el.inventorySummary) return;
+  if (!items.length) {
+    el.inventorySummary.innerHTML = "";
+    return;
+  }
+  const lowStockCount = items.filter((row) => Number(row.current_stock_qty) <= Number(row.reorder_level_qty)).length;
+  const activeCount = items.filter((row) => row.is_active !== false).length;
+  el.inventorySummary.innerHTML = `
+    <span><strong>${items.length}</strong> found</span>
+    <span><strong>${activeCount}</strong> active</span>
+    <span><strong>${lowStockCount}</strong> low stock</span>
+  `;
+}
+
 function renderInventoryList(items = []) {
+  phase5State.inventoryRows = Array.isArray(items) ? items : [];
+  renderInventorySummary(phase5State.inventoryRows);
+
   if (!items.length) {
     el.inventoryList.innerHTML = "<p class='hint'>No inventory rows found</p>";
     phase5State.selectedInventory = null;
@@ -1348,7 +1979,21 @@ function renderInventoryList(items = []) {
   el.inventoryList.innerHTML = items
     .map((row) => {
       const lowStock = Number(row.current_stock_qty) <= Number(row.reorder_level_qty);
-      return `<div class="case-item"><b>${row.item_name}</b><br/>sku: ${row.sku || "NA"}<br/>inventory_item_id: ${row.id}<br/>stock: ${row.current_stock_qty} ${row.uom || ""}<br/>reorder: ${row.reorder_level_qty}<br/>low_stock: ${String(lowStock)}<br/><button type="button" class="ghost use-inventory-btn" data-inventory-id="${row.id}" data-uom="${row.uom || ""}" data-stock="${row.current_stock_qty}" data-reorder="${row.reorder_level_qty}" data-item-name="${row.item_name}">Use for Consumption</button></div>`;
+      const location = getInventoryLocation(row);
+      const editButton = canManageInventory() ? `<button type="button" class="ghost edit-inventory-btn" data-inventory-id="${row.id}">Edit</button>` : "";
+      return `<article class="inventory-result-row ${lowStock ? "is-low-stock" : ""}">
+        <div class="inventory-result-main">
+          <strong>${escapeHtml(row.item_name || "Unnamed part")}</strong>
+          <span>${escapeHtml(row.sku || "No SKU")}</span>
+        </div>
+        <div class="inventory-result-meta">
+          <span><strong>Stock</strong> ${escapeHtml(row.current_stock_qty ?? "0")} ${escapeHtml(row.uom || "")}</span>
+          <span><strong>Place</strong> ${escapeHtml(location)}</span>
+          <span><strong>Reorder</strong> ${escapeHtml(row.reorder_level_qty ?? "0")}</span>
+          <span class="${lowStock ? "inventory-low" : "inventory-ok"}">${lowStock ? "Low stock" : "Available"}</span>
+        </div>
+        ${editButton}
+      </article>`;
     })
     .join("");
 }
@@ -1385,6 +2030,7 @@ async function loadMe() {
     setText(el.whoami, "Not logged in");
     if (el.whoamiTop) setText(el.whoamiTop, "Guest");
     applyRoleView();
+    renderRecentCases([]);
     return;
   }
   try {
@@ -1393,12 +2039,15 @@ async function loadMe() {
     setText(el.whoami, `Logged in: ${result.data.full_name} (${result.data.role})`);
     if (el.whoamiTop) setText(el.whoamiTop, `Hi ${result.data.role}`);
     applyRoleView();
+    await loadRecentCases();
+    showHomeConsole({ scroll: false });
   } catch (error) {
     storage.token = "";
     appState.currentRole = "";
     setText(el.whoami, `Session invalid: ${error.message}`);
     if (el.whoamiTop) setText(el.whoamiTop, "Guest");
     applyRoleView();
+    renderRecentCases([]);
   }
 }
 
@@ -1417,24 +2066,15 @@ el.saveApiBase.addEventListener("click", () => {
 });
 
 el.quickCreateCaseBtn?.addEventListener("click", () => {
-  activateLane("lane-primary", { scroll: false });
-  setPrimaryModuleActive("module-case", { scroll: false });
-  setActiveCasePanel("case-panel-create");
-  document.getElementById("module-case")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  showCaseSurface("case-panel-create");
 });
 
 el.quickSearchCaseBtn?.addEventListener("click", () => {
-  activateLane("lane-primary", { scroll: false });
-  setPrimaryModuleActive("module-case", { scroll: false });
-  setActiveCasePanel("case-panel-search");
-  document.getElementById("module-case")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  showCaseSurface("case-panel-search");
 });
 
-el.quickOpenStatusBtn?.addEventListener("click", () => {
-  activateLane("lane-primary", { scroll: false });
-  setPrimaryModuleActive("module-case", { scroll: false });
-  setActiveCasePanel("case-panel-status");
-  document.getElementById("module-case")?.scrollIntoView({ behavior: "smooth", block: "start" });
+el.backHomeBtn?.addEventListener("click", () => {
+  showHomeConsole();
 });
 
 el.quickLoadFollowupsBtn?.addEventListener("click", () => {
@@ -1455,7 +2095,7 @@ el.quickLoadArchiveIndexBtn?.addEventListener("click", () => {
   if (el.quickLoadArchiveIndexBtn.disabled) return;
   activateLane("lane-primary", { scroll: false });
   setPrimaryModuleActive("module-archive", { scroll: false });
-  setActiveStepPanel("archive", "archive-panel-index");
+  setActiveStepPanel("archive", "archive-panel-usage");
   document.getElementById("module-archive")?.scrollIntoView({ behavior: "smooth", block: "start" });
 });
 
@@ -1468,8 +2108,7 @@ el.quickBillingBtn?.addEventListener("click", () => {
 });
 
 el.quickInventoryBtn?.addEventListener("click", () => {
-  activateLane("lane-inventory", { scroll: false });
-  document.getElementById("lane-inventory")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  showInventorySurface();
 });
 
 el.quickAnalyticsBtn?.addEventListener("click", () => {
@@ -1486,14 +2125,14 @@ el.quickHrBtn?.addEventListener("click", () => {
 
 el.syncContextBtn?.addEventListener("click", () => {
   syncOperationalContextFromCase();
-  setPhase4Result({ action: "sync_context", case_id: el.estimateCaseId.value.trim(), case_item_id: el.estimateItemId.value.trim() });
+  setPhase4Result({ action: "sync_context", case_no: el.estimateCaseNo.value.trim() || caseWorkflowState.caseNo || null, case_item_id: el.estimateItemId.value.trim() });
 });
 
 el.phase5SyncCaseBtn?.addEventListener("click", () => {
   syncPhase5ContextFromCase();
   setPhase5Result({
     action: "sync_case_context",
-    case_id: el.phase5CaseId.value.trim(),
+    case_no: el.phase5CaseNo.value.trim() || caseWorkflowState.caseNo || null,
     case_item_id: el.phase5CaseItemId.value.trim()
   });
 });
@@ -1593,6 +2232,8 @@ function handleLogout() {
   if (el.whoamiTop) setText(el.whoamiTop, "Guest");
   resetCaseWorkflowState();
   clearAnalyticsOverview();
+  renderRecentCases([]);
+  setFollowupCaseContext("", "");
   applyRoleView();
 }
 
@@ -1713,52 +2354,154 @@ el.statusCaseId?.addEventListener("change", () => {
   caseWorkflowState.caseId = caseId;
   if (el.statusCaseNo) el.statusCaseNo.value = "";
   if (el.statusHeaderStatus) el.statusHeaderStatus.value = "";
-  renderStatusProgressBar(caseWorkflowState.previewToStatus);
+  renderCaseDetailSummary();
 });
 
 el.caseStatusItemsBoard?.addEventListener("change", (event) => {
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
-  if (!target.classList.contains("row-to-status")) return;
+  if (target.classList.contains("estimate-draft-input") || target.classList.contains("estimate-draft-select")) {
+    const itemId = target.getAttribute("data-item-id") || "";
+    const field = target.getAttribute("data-field") || "";
+    if (!itemId || !field) return;
+    const draft = ensureEstimateDraft(itemId);
+    draft[field] = field === "gst_required" ? String(target.value) !== "false" : target.value;
+    draft.dirty = true;
+    renderCaseStatusItemsBoard();
+    return;
+  }
 
-  const statusValue = (target.value || "").trim();
-  if (!statusValue) return;
-  caseWorkflowState.previewToStatus = statusValue;
-  renderStatusProgressBar(statusValue);
+  if (target.classList.contains("estimate-part-input")) {
+    const itemId = target.getAttribute("data-item-id") || "";
+    const field = target.getAttribute("data-field") || "";
+    const partIndex = Number(target.getAttribute("data-part-index") || "-1");
+    if (!itemId || !field || partIndex < 0) return;
+    const draft = ensureEstimateDraft(itemId);
+    if (!draft.parts[partIndex]) draft.parts[partIndex] = buildEmptyEstimatePartDraft();
+    draft.parts[partIndex][field] = target.value;
+    draft.dirty = true;
+    renderCaseStatusItemsBoard();
+  }
+});
+
+el.caseStatusItemsBoard?.addEventListener("toggle", (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLDetailsElement)) return;
+  if (!target.classList.contains("item-estimate-panel")) return;
+  const itemId = target.getAttribute("data-status-item-id") || "";
+  if (!itemId) return;
+  caseWorkflowState.estimatePanelOpen[itemId] = target.open;
 });
 
 el.caseStatusItemsBoard?.addEventListener("click", async (event) => {
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
-  if (!target.classList.contains("row-update-item-status")) return;
 
-  const itemId = target.getAttribute("data-status-item-id") || "";
-  const caseId = el.statusCaseId.value.trim();
-  if (!caseId || !itemId) {
-    setFeedback(el.statusResult, "Enter a valid Case ID and load latest case details before updating status.", "error");
+  if (target.classList.contains("add-estimate-part-btn")) {
+    const itemId = target.getAttribute("data-status-item-id") || "";
+    if (!itemId) return;
+    const draft = ensureEstimateDraft(itemId);
+    draft.parts.push(buildEmptyEstimatePartDraft());
+    draft.dirty = true;
+    caseWorkflowState.estimatePanelOpen[itemId] = true;
+    renderCaseStatusItemsBoard();
     return;
   }
 
-  const row = target.closest("tr");
-  if (!(row instanceof HTMLTableRowElement)) return;
+  if (target.classList.contains("remove-estimate-part-btn")) {
+    const itemId = target.getAttribute("data-status-item-id") || "";
+    const partIndex = Number(target.getAttribute("data-part-index") || "-1");
+    if (!itemId || partIndex < 0) return;
+    const draft = ensureEstimateDraft(itemId);
+    draft.parts.splice(partIndex, 1);
+    if (!draft.parts.length) draft.parts.push(buildEmptyEstimatePartDraft());
+    draft.dirty = true;
+    caseWorkflowState.estimatePanelOpen[itemId] = true;
+    renderCaseStatusItemsBoard();
+    return;
+  }
 
-  const toStatusInput = row.querySelector(".row-to-status");
-  const noteInput = row.querySelector(".row-status-note");
-  const toStatus = toStatusInput instanceof HTMLSelectElement ? toStatusInput.value.trim() : "";
+  if (target.classList.contains("save-item-estimate-btn")) {
+    const itemId = target.getAttribute("data-status-item-id") || "";
+    const caseId = el.statusCaseId.value.trim();
+    const action = target.getAttribute("data-estimate-action") || "draft";
+    if (!caseId || !itemId) {
+      setFeedback(el.statusResult, "Open a valid case before saving a quote.", "error");
+      return;
+    }
+
+    const validation = validateEstimateDraftForSubmit(itemId);
+    if (validation.error) {
+      setFeedback(el.statusResult, validation.error, "error");
+      return;
+    }
+
+    try {
+      caseWorkflowState.estimatePanelOpen[itemId] = true;
+      const result = await withButtonBusy(target, action === "send" ? "Sending..." : "Saving...", async () => api(`/v1/cases/${caseId}/items/${itemId}/estimate-workbench`, {
+        method: "POST",
+        body: JSON.stringify({
+          ...validation.data,
+          send_for_decision: action === "send"
+        })
+      }));
+
+      el.estimateCaseId.value = caseId;
+      el.estimateItemId.value = itemId;
+      if (result?.data?.estimate?.id) {
+        el.estimateId.value = result.data.estimate.id;
+      }
+
+      await loadCaseWorkflowContext(caseId, {
+        preferredItemId: itemId,
+        silent: true
+      });
+
+      const message = action === "send"
+        ? `Quote saved for ${caseWorkflowState.caseNo || "selected case"}. Item is ready for customer approval review.`
+        : `Quote draft saved for ${caseWorkflowState.caseNo || "selected case"}.`;
+      setFeedback(el.statusResult, message, "success");
+    } catch (error) {
+      setFeedback(el.statusResult, error.message || "Unable to save item quote.", "error");
+    }
+    return;
+  }
+
+  const actionButton = target.closest(".row-status-action-btn");
+  if (!(actionButton instanceof HTMLButtonElement)) return;
+
+  const itemId = actionButton.getAttribute("data-status-item-id") || "";
+  const toStatus = actionButton.getAttribute("data-to-status") || "";
+  const caseId = el.statusCaseId.value.trim();
+  if (!caseId || !itemId) {
+    setFeedback(el.statusResult, "Open a valid case and load latest case details before updating item status.", "error");
+    return;
+  }
+
+  const card = actionButton.closest(".case-status-item-card");
+  const scope = card instanceof HTMLElement ? card : null;
+  if (!(scope instanceof HTMLElement)) return;
+
+  const noteInput = scope.querySelector(".row-status-note");
   const note = noteInput instanceof HTMLInputElement ? noteInput.value.trim() : "";
-  const currentStatus = row.children[3]?.textContent?.trim() || "";
+  const currentItem = (caseWorkflowState.items || []).find((entry) => entry.id === itemId);
+  const currentStatus = currentItem?.item_status || "";
 
   if (!toStatus) {
-    setFeedback(el.statusResult, "Select a target status before updating this item.", "error");
+    setFeedback(el.statusResult, "Choose a valid next action for this item.", "error");
     return;
   }
   if (currentStatus && currentStatus === toStatus) {
-    setFeedback(el.statusResult, "Select the next status, not the current one.", "error");
+    setFeedback(el.statusResult, "Choose the next status, not the current one.", "error");
     return;
   }
 
   try {
-    const result = await withButtonBusy(target, "Updating...", async () => api(`/v1/cases/${caseId}/items/${itemId}/status`, {
+    caseWorkflowState.previewItemId = itemId;
+    caseWorkflowState.previewToStatus = toStatus;
+    renderCaseDetailSummary();
+
+    const result = await withButtonBusy(actionButton, `Saving ${formatUiLabel(toStatus)}...`, async () => api(`/v1/cases/${caseId}/items/${itemId}/status`, {
       method: "POST",
       body: JSON.stringify({
         to_status: toStatus,
@@ -1779,7 +2522,7 @@ el.caseStatusItemsBoard?.addEventListener("click", async (event) => {
       silent: true
     });
 
-    setFeedback(el.statusResult, `Updated item ${itemId}: ${result.data.from_status} -> ${result.data.to_status} | header=${result.data.header_status}`, "success");
+    setFeedback(el.statusResult, `Saved ${caseWorkflowState.caseNo || "selected case"}: ${formatUiLabel(result.data.from_status || "Start", "Start")} -> ${formatUiLabel(result.data.to_status)} | header=${formatUiLabel(result.data.header_status)}`, "success");
   } catch (error) {
     setFeedback(el.statusResult, formatUiError("update_case_status", error.message), "error");
   }
@@ -1828,16 +2571,12 @@ el.createCaseBtn.addEventListener("click", async () => {
 
     const createdItems = Array.isArray(result?.data?.case_items) ? result.data.case_items : [];
     const createdCount = createdItems.length || (result?.data?.total_units_received ?? items.length);
-    setFeedback(el.createResult, `Case created successfully. Case ID: ${result.data.case_id} | Items: ${createdCount}`, "success");
-    el.statusCaseId.value = result.data.case_id;
+    setFeedback(el.createResult, `Case ${caseNo} created with ${createdCount} item(s).`, "success");
     el.statusItemId.value = result.data.case_item_id;
-    syncOperationalContextFromCase();
-    setActiveCasePanel("case-panel-status");
-    await loadCaseWorkflowContext(result.data.case_id, {
-      preferredItemId: result.data.case_item_id,
-      silent: true
+    await openCaseStatusWorkspace(result.data.case_id, caseNo, {
+      successMessage: `Case ${caseNo} is open. Update item status when work moves forward.`
     });
-    setFeedback(el.statusResult, `Case created and opened in Status Update. Start with item ${result.data.case_item_id}.`, "success");
+    await loadRecentCases();
   }).catch((error) => {
     setFeedback(el.createResult, formatUiError("create_case", error.message), "error");
   });
@@ -1871,24 +2610,21 @@ el.searchBtn.addEventListener("click", async () => {
 
     el.searchResults.innerHTML = result.data
       .map((row) => {
-        const customerRaw = row.customers;
-        const customer = Array.isArray(customerRaw)
-          ? (customerRaw[0] || {})
-          : (customerRaw || {});
+        const customer = getCustomerRecord(row);
         return `
-          <article class="search-result-card">
+          <article class="search-result-card case-detail-result age-${getCaseAgeTone(row)}">
             <div class="search-result-head">
               <div>
                 <p class="search-result-case-no">${row.case_no || "NA"}</p>
                 <p class="search-result-customer">${customer.name || "Unknown customer"}</p>
               </div>
-              <span class="search-result-status">${row.header_status || "NA"}</span>
+              <span class="search-result-status">${formatUiLabel(row.header_status || "NA")}</span>
             </div>
             <div class="search-result-meta">
               <span><strong>Phone</strong> ${customer.phone || "NA"}</span>
-              <span><strong>Case ID</strong> ${row.id}</span>
+              <span><strong>Open</strong> ${getCaseAgeLabel(row)}</span>
             </div>
-            <button type="button" class="ghost use-case-btn" data-case-id="${row.id}" data-case-no="${row.case_no || ""}">Open Status Workspace</button>
+            <button type="button" class="ghost use-case-btn" data-case-id="${row.id}" data-case-no="${row.case_no || ""}">View Details</button>
           </article>
         `;
       })
@@ -1898,56 +2634,107 @@ el.searchBtn.addEventListener("click", async () => {
   });
 });
 
-el.searchResults.addEventListener("click", async (event) => {
-  const target = event.target;
-  if (!(target instanceof HTMLElement)) return;
-  if (!target.classList.contains("use-case-btn")) return;
-
+async function handleUseCaseClick(target) {
   const caseId = target.getAttribute("data-case-id") || "";
   const caseNo = target.getAttribute("data-case-no") || "";
   if (!caseId) return;
 
-  el.statusCaseId.value = caseId;
-  caseWorkflowState.caseNo = caseNo;
-  el.estimateCaseId.value = caseId;
-  el.phase5CaseId.value = caseId;
-  setActiveCasePanel("case-panel-status");
   try {
     await withButtonBusy(target, "Opening...", async () => {
-      await loadCaseWorkflowContext(caseId, { silent: true });
+      await openCaseStatusWorkspace(caseId, caseNo, {
+        successMessage: `Case ${caseNo || "selected case"} details loaded.`
+      });
     });
-    setFeedback(el.statusResult, `Case selected: ${caseNo || caseId}. Status workspace is ready.`, "success");
   } catch {
-    setFeedback(el.statusResult, `Case selected: ${caseId}. Load latest case details to continue.`, "error");
+    setFeedback(el.statusResult, `Case ${caseNo || "selected case"} could not be opened. Retry from search or recent cases.`, "error");
   }
+}
+
+el.searchResults.addEventListener("click", async (event) => {
+  const target = event.target instanceof HTMLElement ? event.target.closest(".use-case-btn") : null;
+  if (!(target instanceof HTMLElement)) return;
+
+  await handleUseCaseClick(target);
+});
+
+el.recentCasesList?.addEventListener("click", async (event) => {
+  const target = event.target instanceof HTMLElement ? event.target.closest(".use-case-link, .use-case-btn") : null;
+  if (!(target instanceof HTMLElement)) return;
+  event.preventDefault();
+
+  await handleUseCaseClick(target);
+});
+
+el.saveCaseNotesBtn?.addEventListener("click", async () => {
+  const caseId = caseWorkflowState.caseId || el.statusCaseId?.value?.trim() || "";
+  if (!caseId) {
+    setFeedback(el.statusResult, "Open a case before saving notes.", "error");
+    return;
+  }
+
+  await withButtonBusy(el.saveCaseNotesBtn, "Saving...", async () => {
+    try {
+      const notes = el.caseNotes?.value || "";
+      const result = await api(`/v1/cases/${caseId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ notes })
+      });
+      caseWorkflowState.notes = result?.data?.notes || notes;
+      if (el.caseNotes) el.caseNotes.value = caseWorkflowState.notes;
+      setFeedback(el.statusResult, `Saved notes for ${caseWorkflowState.caseNo || "selected case"}.`, "success");
+    } catch (error) {
+      setFeedback(el.statusResult, `Note save failed: ${error.message}`, "error");
+    }
+  });
 });
 
 el.createInventoryBtn?.addEventListener("click", async () => {
-  try {
-    const payload = {
-      sku: el.inventorySku.value.trim() || null,
-      item_name: el.inventoryName.value.trim(),
-      uom: el.inventoryUom.value.trim() || "pcs",
-      current_stock_qty: toNumberOrNull(el.inventoryStockQty.value),
-      reorder_level_qty: toNumberOrNull(el.inventoryReorderQty.value),
-      default_unit_cost_paise: toIntOrZero(el.inventoryUnitCostPaise.value),
-      valuation_method: el.inventoryValuation.value
-    };
-
-    const result = await api("/v1/inventory/items", {
-      method: "POST",
-      body: JSON.stringify(payload)
-    });
-
-    if (result?.data?.id) {
-      el.phase5InventoryItemId.value = result.data.id;
-    }
-    setText(el.inventoryCreateResult, `Created inventory item: ${result?.data?.id || "NA"}`);
-    setPhase5Result({ action: "create_inventory_item", ...result });
-  } catch (error) {
-    setText(el.inventoryCreateResult, `Inventory create failed: ${error.message}`);
-    setPhase5Result({ action: "create_inventory_item", error: error.message });
+  if (!canManageInventory()) {
+    setFeedback(el.inventoryCreateResult, "Inventory updates are available for Admin/IT only.", "error");
+    return;
   }
+
+  await withButtonBusy(el.createInventoryBtn, "Saving...", async () => {
+    try {
+      const inventoryId = el.inventoryEditId?.value?.trim() || "";
+      const payload = {
+        sku: el.inventorySku.value.trim() || null,
+        item_name: el.inventoryName.value.trim(),
+        storage_location: el.inventoryLocation?.value?.trim() || null,
+        uom: el.inventoryUom.value.trim() || "pcs",
+        current_stock_qty: toNumberOrNull(el.inventoryStockQty.value) ?? 0,
+        reorder_level_qty: toNumberOrNull(el.inventoryReorderQty.value) ?? 0,
+        default_unit_cost_paise: toIntOrZero(el.inventoryUnitCostPaise.value),
+        valuation_method: el.inventoryValuation.value,
+        is_active: toBool(el.inventoryActive?.value ?? "true")
+      };
+
+      if (!payload.item_name) {
+        setFeedback(el.inventoryCreateResult, "Item name is required.", "error");
+        return;
+      }
+
+      const result = await api(inventoryId ? `/v1/inventory/items/${inventoryId}` : "/v1/inventory/items", {
+        method: inventoryId ? "PATCH" : "POST",
+        body: JSON.stringify(payload)
+      });
+
+      if (result?.data?.id) {
+        if (el.phase5InventoryItemId) el.phase5InventoryItemId.value = result.data.id;
+        hydrateInventoryForm(result.data);
+      }
+      setFeedback(el.inventoryCreateResult, inventoryId ? "Inventory updated." : "Inventory item created.", "success");
+      setPhase5Result({ action: inventoryId ? "update_inventory_item" : "create_inventory_item", ...result });
+      el.loadInventoryBtn?.click();
+    } catch (error) {
+      setFeedback(el.inventoryCreateResult, `Inventory save failed: ${error.message}`, "error");
+      setPhase5Result({ action: "save_inventory_item", error: error.message });
+    }
+  });
+});
+
+el.clearInventoryFormBtn?.addEventListener("click", () => {
+  resetInventoryForm();
 });
 
 el.loadInventoryBtn?.addEventListener("click", async () => {
@@ -1960,7 +2747,7 @@ el.loadInventoryBtn?.addEventListener("click", async () => {
 
     const result = await api(`/v1/inventory/items?${params.toString()}`, { method: "GET" });
     renderInventoryList(result.data || []);
-    if (!el.phase5InventoryItemId.value.trim() && result.data?.[0]?.id) {
+    if (el.phase5InventoryItemId && !el.phase5InventoryItemId.value.trim() && result.data?.[0]?.id) {
       el.phase5InventoryItemId.value = result.data[0].id;
     }
     if (result.data?.[0]) {
@@ -1978,6 +2765,17 @@ el.loadInventoryBtn?.addEventListener("click", async () => {
 el.inventoryList?.addEventListener("click", (event) => {
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
+
+  if (target.classList.contains("edit-inventory-btn")) {
+    const inventoryId = target.getAttribute("data-inventory-id") || "";
+    const row = phase5State.inventoryRows.find((entry) => entry.id === inventoryId);
+    if (row) {
+      hydrateInventoryForm(row);
+      document.querySelector(".inventory-admin-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    return;
+  }
+
   if (!target.classList.contains("use-inventory-btn")) return;
 
   const inventoryId = target.getAttribute("data-inventory-id") || "";
@@ -1987,7 +2785,7 @@ el.inventoryList?.addEventListener("click", (event) => {
   const itemName = target.getAttribute("data-item-name") || "";
   if (!inventoryId) return;
 
-  el.phase5InventoryItemId.value = inventoryId;
+  if (el.phase5InventoryItemId) el.phase5InventoryItemId.value = inventoryId;
   phase5State.selectedInventory = {
     id: inventoryId,
     item_name: itemName,
@@ -1995,7 +2793,7 @@ el.inventoryList?.addEventListener("click", (event) => {
     reorder_level_qty: reorder,
     uom
   };
-  if (!el.consumeUom.value.trim() && uom) {
+  if (el.consumeUom && !el.consumeUom.value.trim() && uom) {
     el.consumeUom.value = uom;
   }
   updatePhase5StockWarning();
@@ -2014,7 +2812,7 @@ el.consumeOnCaseBtn?.addEventListener("click", async () => {
     const qty = toNumberOrNull(el.consumeQty.value);
 
     if (!caseId || !caseItemId || !inventoryItemId) {
-      setPhase5Result({ action: "consume_on_case", error: "case_id, case_item_id, and inventory_item_id are required" });
+      setPhase5Result({ action: "consume_on_case", error: "Sync case context first, then provide case item and inventory item." });
       return;
     }
     if (qty === null || qty <= 0) {
@@ -2058,7 +2856,7 @@ el.loadCaseConsumptionBtn?.addEventListener("click", async () => {
   try {
     const caseId = el.phase5CaseId.value.trim();
     if (!caseId) {
-      setPhase5Result({ action: "load_case_consumption", error: "Provide case_id" });
+      setPhase5Result({ action: "load_case_consumption", error: "Sync or open a case first." });
       return;
     }
 
@@ -2363,7 +3161,7 @@ el.historyBtn.addEventListener("click", async () => {
     const caseId = el.statusCaseId.value.trim();
     if (!caseId) {
       if (el.historyTimeline) {
-        el.historyTimeline.innerHTML = "<p class='hint'>Enter Case ID and load latest case details first.</p>";
+        el.historyTimeline.innerHTML = "<p class='hint'>Open a case first, then load latest case details before viewing timeline.</p>";
       }
       return;
     }
@@ -2383,8 +3181,8 @@ el.historyBtn.addEventListener("click", async () => {
       .map((row) => {
         const lineNo = lineByItemId[row.case_item_id] || "-";
         const changedAt = row.changed_at_utc ? new Date(row.changed_at_utc).toLocaleString() : "NA";
-        const fromStatus = row.from_status || "Start";
-        const toStatus = row.to_status || "NA";
+        const fromStatus = formatUiLabel(row.from_status || "Start", "Start");
+        const toStatus = formatUiLabel(row.to_status || "NA");
         const note = row.note || "-";
         return `
           <div class="history-row">
@@ -2433,22 +3231,22 @@ el.loadFollowupsBtn.addEventListener("click", async () => {
                 <p class="followup-result-case-no">${caseObj.case_no || "NA"}</p>
                 <p class="followup-result-customer">${customer.name || "Unknown customer"}</p>
               </div>
-              <span class="followup-result-status">${row.item_status || "NA"}</span>
+              <span class="followup-result-status">${formatUiLabel(row.item_status || "NA")}</span>
             </div>
             <div class="followup-result-meta">
               <span><strong>Phone</strong> ${customer.phone || "NA"}</span>
-              <span><strong>Case ID</strong> ${row.case_id}</span>
               <span><strong>Reminder</strong> ${reminderState}</span>
               <span><strong>Due</strong> ${dueAt}</span>
             </div>
-            <button type="button" class="ghost use-followup-case-btn" data-case-id="${row.case_id}">Use This Case</button>
+            <button type="button" class="ghost use-followup-case-btn" data-case-id="${row.case_id}" data-case-no="${caseObj.case_no || ""}">Open ${caseObj.case_no || "Case"}</button>
           </article>
         `;
       })
       .join("");
 
     if (!el.followupCaseId.value.trim()) {
-      el.followupCaseId.value = result.data[0].case_id;
+      const firstCaseNo = result.data[0]?.cases?.case_no || result.data[0]?.cases?.[0]?.case_no || "";
+      setFollowupCaseContext(result.data[0].case_id, firstCaseNo);
     }
     setActiveStepPanel("followup", "followup-panel-note");
   }).catch((error) => {
@@ -2456,22 +3254,25 @@ el.loadFollowupsBtn.addEventListener("click", async () => {
   });
 });
 
-el.followupResults.addEventListener("click", (event) => {
+el.followupResults.addEventListener("click", async (event) => {
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
   if (!target.classList.contains("use-followup-case-btn")) return;
 
   const caseId = target.getAttribute("data-case-id") || "";
+  const caseNo = target.getAttribute("data-case-no") || "";
   if (!caseId) return;
-  el.followupCaseId.value = caseId;
-  setFeedback(el.followupResult, `Follow-up note will be saved on case ${caseId}.`, "success");
+  setFollowupCaseContext(caseId, caseNo);
+  setFeedback(el.followupResult, `Follow-up note will be saved on ${caseNo || "the selected case"}.`, "success");
+  await handleUseCaseClick(target);
 });
 
 el.saveFollowupNoteBtn.addEventListener("click", async () => {
   try {
     const caseId = el.followupCaseId.value.trim();
+    const caseNo = el.followupCaseNo?.value.trim() || "selected case";
     if (!caseId) {
-      setText(el.followupResult, "Provide case ID");
+      setText(el.followupResult, "Select a case from the follow-up queue first.");
       return;
     }
 
@@ -2484,7 +3285,7 @@ el.saveFollowupNoteBtn.addEventListener("click", async () => {
       })
     });
 
-    setText(el.followupResult, `Saved follow-up for ${result.data.case_no}`);
+    setText(el.followupResult, `Saved follow-up for ${result.data.case_no || caseNo}`);
   } catch (error) {
     setText(el.followupResult, `Follow-up save failed: ${error.message}`);
   }
@@ -2557,7 +3358,7 @@ el.listCaseEstimatesBtn.addEventListener("click", async () => {
   try {
     const caseId = el.estimateCaseId.value.trim();
     if (!caseId) {
-      setPhase4Result({ action: "list_case_estimates", error: "Provide case_id" });
+      setPhase4Result({ action: "list_case_estimates", error: "Sync or open a case first." });
       return;
     }
     const result = await api(`/v1/cases/${caseId}/estimates`, { method: "GET" });
@@ -2582,7 +3383,7 @@ el.loadLatestEstimateBtn?.addEventListener("click", async () => {
   try {
     const caseId = el.estimateCaseId.value.trim();
     if (!caseId) {
-      setPhase4Result({ action: "load_latest_estimate", error: "Provide case_id" });
+      setPhase4Result({ action: "load_latest_estimate", error: "Sync or open a case first." });
       return;
     }
 
@@ -2799,10 +3600,10 @@ setActiveStepPanel("billing", "billing-panel-estimate");
 applyRoleView();
 setCompactMobileMode();
 window.addEventListener("resize", setCompactMobileMode);
-if (!el.expenseDateLocal.value) {
+if (el.expenseDateLocal && !el.expenseDateLocal.value) {
   el.expenseDateLocal.value = toDateLocalString();
 }
-if (!el.billDueDate.value) {
+if (el.billDueDate && !el.billDueDate.value) {
   el.billDueDate.value = toDateLocalString(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
 }
 if (el.hrAttendanceDate && !el.hrAttendanceDate.value) {

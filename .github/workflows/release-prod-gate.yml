@@ -13,10 +13,12 @@ jobs:
     name: release-prod-gate
     runs-on: windows-latest
     timeout-minutes: 30
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Run production release gate
         shell: pwsh
@@ -26,6 +28,7 @@ jobs:
           ./smoke_release_prod_gate.ps1 -ResultPath ../../artifacts/release_prod_gate_result.json | Tee-Object -FilePath ../../artifacts/release_prod_gate_output.txt
 
       - name: Upload release gate artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: release-prod-gate-output

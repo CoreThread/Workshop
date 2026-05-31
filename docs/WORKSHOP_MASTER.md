@@ -16,13 +16,13 @@
 - Reliable case tracking.
 - Inventory linked to case spare consumption.
 - Follow-up control for pending approvals and pickups.
-- Expense and recurring bill visibility.
+- Inventory visibility with shelf/place lookup.
 - Accurate financial visibility for Admin only.
 
 ### Roles
 - `Admin`: full access across operations, analytics, finance, HR, settings, backup, and user management.
 - `IT`: full technical and operational access except profit/margin and HR-sensitive visibility.
-- `Staff`: case operations and case-linked spare consumption only; no advanced finance, analytics, archive admin, or HR visibility.
+- `Staff`: case operations and inventory search/check only; no inventory updates, finance, analytics, archive admin, or HR visibility.
 
 ### Hard Constraints
 - Keep `/v1` API changes additive and backward-compatible.
@@ -45,8 +45,10 @@
 - Backend Worker: `https://workshop-api.jaiswal-utkarshuj.workers.dev`
 - Frontend Pages stable: `https://workshop-frontend.pages.dev`
 - Latest frontend preview verified in this session: `https://00b65493.workshop-frontend.pages.dev`
+- Latest frontend preview verified in this session: `https://495e8877.workshop-frontend.pages.dev`
 - Cloudflare Pages deploy command:
   - `npx --prefix backend wrangler pages deploy frontend --project-name workshop-frontend --branch main --commit-dirty=true`
+- Latest frontend preview verified in this session: `https://def6939e.workshop-frontend.pages.dev`
 
 ## Implementation Status
 
@@ -64,15 +66,44 @@
 - Phase 10 release engineering and deterministic prod gate: complete.
 
 ### Current Frontend Direction
-- Quick Actions is the primary navigation surface.
-- Lane 1 uses focused single-module visibility to reduce clutter.
+- The post-login home screen is a compact workshop console: New Case, Find Case Details, Inventory, and Active Cases only.
+- The current basic login form defaults to the Staff operator account because Staff has enough access for create/find/status case operations.
+- Case create, search, and status details are no longer displayed on the home screen; they open in a separate case workspace with Back navigation.
+- Basic frontend mode is active: first-screen operations are New Case, Find Case Details, Inventory, plus the active-case queue.
+- Lane 1 remains available behind the case workspace and uses focused single-module visibility to reduce clutter.
 - Search is separate from create-step semantics.
-- Status opens as a standalone workspace when reached directly.
-- Search results and follow-up results now use simplified scan-first cards.
+- Status opens as a case details workspace when reached from search, create, or an active case row.
+- Offline case numbers are the visible UI reference; backend UUID case ids remain internal.
+- Secondary workspaces remain in code but are hidden from the current basic UI.
+- Case Details now shows a compact case header, text item summary, case notes box, item rows, and direct next-status buttons only; progress bars, quote, parts, estimate, and timeline controls are hidden from the current operator view.
+- Case Details uses simplified workshop-facing labels: Received, Checking, Waiting Approval, Repairing, Waiting Part, Ready, Delivered, and Cancelled.
+- Post-login Active Cases show open cases from live DB-backed data, with 2+ day cases highlighted yellow and more-than-3-day cases highlighted red.
+- Search results and active-case rows now use simple scan-first rows instead of nested cards.
+- The current visual direction is flatter and quieter: top bar, queue rows, and action buttons instead of card-heavy nested panels.
+- Inventory remains separate from Case Details and is visible from the basic home screen. Staff gets search/list/check only; Admin/IT gets the update form for item, stock, reorder, cost, active state, and storage place.
+- Expenses + Recurring Bills are removed from the current visible frontend scope. Backend phase coverage remains in place for historical compatibility.
+- Migration `backend/migrations/0013_phase10_inventory_storage_location.sql` adds `inventory_items.storage_location` so searched parts can show a real shelf/place value.
 - Validation and success messages use stronger highlighted feedback states.
 - Lightweight inline button loaders are enabled for core async Lane 1 actions.
 
 ## Operational Runbook
+
+### Realistic Data Seeding
+- Script: `backend/scripts/seed_real_world_cases.mjs`
+- Purpose: populate an empty or non-production environment with realistic workshop cases using the existing `/v1` APIs.
+- Default case-number style starts from `AG-001` and can be shifted with environment overrides to avoid collisions.
+- Recommended env overrides:
+  - `WORKSHOP_SEED_API_BASE`
+  - `WORKSHOP_SEED_START_NO`
+  - `WORKSHOP_SEED_COUNT`
+  - `WORKSHOP_SEED_CASE_PREFIX`
+
+### Inventory Data Seeding
+- Script: `backend/scripts/seed_real_world_inventory.mjs`
+- Purpose: idempotently create/update common workshop inventory parts with realistic stock, reorder levels, costs, and storage places.
+- Live seed state on `2026-05-31`: `REAL_WORLD_INVENTORY_READY`, 30 rows, Staff API verified for capacitor and Rack C2 searches.
+- Uses IT/Admin credentials through `/v1/auth/login`; defaults to `it@rajeshelec.local` and the configured worker API.
+- Requires migration `0013_phase10_inventory_storage_location.sql` and the Worker containing `storage_location` support to be deployed before place searches work.
 
 ### Local Preflight
 - Script: `backend/scripts/preflight_local_smoke.ps1`
@@ -136,7 +167,61 @@
 
 ## Change History
 
+### 2026-05-31
+- Tightened reversible basic frontend mode so the operator UI now focuses only on New Case and Find Case Details.
+- Hid Follow-up, Close Day, Backup, Billing, Stock, Analytics, and HR from the current first-run UI while leaving existing backend APIs and frontend modules in place for later re-enable.
+- Replaced Recent Cases with Active Cases after login, filtering out closed cases and highlighting open cases at 2+ days in yellow and more than 3 days in red.
+- Simplified Case Status so the visible operator surface is item details plus direct next-status buttons only; quote, parts, estimate, timeline, and note controls are hidden in basic mode.
+- Moved the case workspace off the home screen; New Case, Find Case Details, and active-case rows now open a separate case surface with Back navigation.
+- Replaced the Case Details progress shell and per-item step tracks with a compact text summary and action-first item rows.
+- Simplified visible case status wording while keeping existing backend status values and transition enforcement intact.
+- Restored Waiting Approval as a visible step in the basic status flow and added Inventory as a separate home action for stock lookup.
+- Flattened the basic case UI to remove the old card-inside-card feeling across the top bar, home actions, active cases, search results, and status item rows.
+- Restored the Staff/IT role test users using the existing maintenance script and defaulted the basic login form to Staff for the current case-only workflow.
+
+### 2026-03-13
+- Revamped Case Status Workspace layout: replaced the two read-only CaseNo/HeaderStatus inputs with a compact single-line banner showing case number and header status as inline badges.
+- Removed bucket grouping (Pending / In Repair / Ready / Completed) — item cards now render as a flat list ordered by line number, which is cleaner for the typical 1-5 items per case.
+- Added per-item horizontal step indicator so operators can see at a glance how far each item has progressed through the workflow without reading status labels.
+- Separated status action buttons into primary happy-path buttons (prominent) and secondary actions (Cancel/Rejected — small, muted, less visual weight) so the next logical step is obvious.
+- Terminal items (Delivered/Cancelled) now render dimmed with no action buttons — they are done and no longer need operator attention.
+- Moved transition note from always-visible input to a collapsible toggle (`+ Note`) — notes are occasional, not every-click, so they take space only when needed.
+- Moved Timeline button into the case banner for quicker access.
+- Replaced the duplicated progress label (case info repeated in pills + label + card badges) with a single compact pill bar plus item-level step tracks.
+- Revamped status progress bar: replaced 10-tile status grid with compact inline pills showing only statuses with items or the active target.
+- Removed verbose per-item meta chips, guidance paragraphs, and action explainer text.
+- Compact quote panel: removed instructional hints, replaced 4-card totals grid with single inline totals bar, moved GST inline, shortened button labels.
+- Deployed frontend and re-ran the production release gate successfully.
+- Ran multi-item live smoke (case `UX-REVAMP-20260313161608`) — 2 items, quote save, WaitingApproval movement, and workbench load all passed.
+- Reworked `Case Status Update` into a clearer item-wise approval workbench so each item now shows its own guidance, next-status action, and quote/approval area instead of relying on the older dense row-table workflow.
+- Added additive backend endpoint `GET /v1/cases/{case_id}/status-workbench` so the status workspace can load case header, items, and each item's latest quote context in one request.
+- Added additive backend endpoint `POST /v1/cases/{case_id}/items/{item_id}/estimate-workbench` for item-wise quote creation directly from Status without changing existing Phase 4 estimate or billing APIs.
+- Added migration `0012_phase10_status_estimate_workbench.sql` and the new `item_estimate_parts` table so quoted part lines and paise costs are stored per estimate version with audit-safe persistence.
+- Quote send flow now moves `Diagnosis -> WaitingApproval` from the new status workbench when the operator saves and sends customer approval, while existing backend transition enforcement remains in place.
+- Replaced the irritating `To Status` select-plus-save pattern with direct per-item next-action buttons so operators can move an item forward in one click with an optional note.
+- Status quote entry now uses rupees in the UI with up to 2 decimal places while backend and database values remain paise integers internally.
+- Default GST selection in the status quote workbench is now `No GST` until the operator explicitly enables it.
+- Fixed the status quote tile so clicking `Add Part` no longer collapses the workbench while the operator is drafting a quote.
+- Compressed the `Quick Actions` area by removing extra helper copy and making `Recent Cases` read as directly clickable links.
+- Deployed the backend Worker after the new status quote workbench was added.
+- Deployed the frontend after the status workspace UX rewrite and quick-action collapse change.
+- Redeployed the frontend again after the direct-action status buttons, rupee-based quote entry, and compact quick-actions refinement.
+- Re-ran the production release gate successfully after the backend deploy.
+- Ran a live dedicated smoke for the new status quote flow using case `UX-STATUS-20260313153021`; quote save, part-line persistence, and `WaitingApproval` movement all passed.
+
 ### 2026-03-12
+- Updated the `To Status` dropdown to show the full item-status list in the UI while still blocking invalid workflow transitions.
+- Simplified the status workspace UI so item rows use `Save` instead of `Update`, removed the redundant manual refresh control, and humanized visible status labels such as `Approved For Repair` and `Out For Delivery`.
+- Removed visible `Lane` and `Phase` wording from the main frontend workspace to keep the operations UI cleaner.
+- Applied migration `0011_phase10_case_item_status_extensions.sql` to extend item workflow with `WaitingPart` and `OutForDelivery`.
+- Deployed the backend Worker after the status-flow extension and re-ran the production release gate successfully.
+- Frontend was redeployed after the status-flow update so the new Case Status Update options are live.
+- Extended item-wise case status flow so operators can move through `Diagnosis -> ApprovedForRepair -> InRepair -> WaitingPart -> Ready -> OutForDelivery -> Delivered` while keeping existing approval-safe branches available.
+- Removed the redundant Daily Core Status quick action; New Case and Find Case now remain the status entry paths.
+- Added a live recent-cases rail after login using a dedicated additive recent-case API query.
+- Replaced visible UUID case references in Lane 1 with offline case numbers while keeping backend ids internal.
+- Reworked the status progress shell to reflect mixed multi-item states instead of implying one linear whole-case path.
+- Limited item status dropdowns to valid next transitions per row.
 - Replaced fragmented navigation with Quick Actions as the primary movement layer.
 - Simplified Lane 1 so only one primary module is visible at a time.
 - Removed search from step semantics and made status a standalone workspace when opened directly.

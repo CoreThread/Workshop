@@ -8,12 +8,14 @@ const LIST_QUERY_TIMEOUT_MS = 7000;
 
 const ITEM_STATUS_TRANSITIONS = {
   Received: ["Diagnosis", "Cancelled"],
-  Diagnosis: ["WaitingApproval", "Cancelled"],
+  Diagnosis: ["WaitingApproval", "ApprovedForRepair", "Cancelled"],
   WaitingApproval: ["ApprovedForRepair", "RejectedByCustomer", "Cancelled"],
   ApprovedForRepair: ["InRepair", "Cancelled"],
   RejectedByCustomer: ["Cancelled"],
-  InRepair: ["Ready", "Cancelled"],
-  Ready: ["Delivered", "Cancelled"],
+  InRepair: ["WaitingPart", "Ready", "Cancelled"],
+  WaitingPart: ["InRepair", "Ready", "Cancelled"],
+  Ready: ["OutForDelivery", "Delivered", "Cancelled"],
+  OutForDelivery: ["Delivered", "Cancelled"],
   Delivered: [],
   Cancelled: []
 };
@@ -162,11 +164,12 @@ function deriveHeaderStatus(itemStatuses) {
   const allDeliveredOrCancelled = itemStatuses.every((s) => s === "Delivered" || s === "Cancelled");
   if (allDeliveredOrCancelled) return "DeliveredAll";
 
-  const allReadyDeliveredCancelled = itemStatuses.every((s) => s === "Ready" || s === "Delivered" || s === "Cancelled");
+  const readyOrOutboundStatuses = new Set(["Ready", "OutForDelivery", "Delivered", "Cancelled"]);
+  const allReadyDeliveredCancelled = itemStatuses.every((s) => readyOrOutboundStatuses.has(s));
   if (allReadyDeliveredCancelled) return "ReadyAll";
 
-  const hasDelivered = itemStatuses.some((s) => s === "Delivered");
-  if (hasDelivered) return "PartiallyReady";
+  const hasReadyOrOutbound = itemStatuses.some((s) => readyOrOutboundStatuses.has(s) && s !== "Cancelled");
+  if (hasReadyOrOutbound) return "PartiallyReady";
 
   return "InProgress";
 }
@@ -365,6 +368,103 @@ function itemStatusFromDecision(decision) {
   return null;
 }
 
+function computePartLineTotalPaise(qty, unitCostPaise) {
+  const total = Math.round(Number(qty) * Number(unitCostPaise));
+  if (!Number.isSafeInteger(total) || total < 0) return null;
+  return total;
+}
+
+function normalizeEstimatePartLines(partsInput = []) {
+  if (partsInput === undefined) return { data: [] };
+  if (!Array.isArray(partsInput)) {
+    return { error: "parts must be an array" };
+  }
+
+  const normalized = [];
+  for (const row of partsInput) {
+    const partName = ensureNonEmptyString(row?.part_name) ? row.part_name.trim() : "";
+    const qty = parsePositiveNumber(row?.qty, 1);
+    const unitCostPaise = parsePaise(row?.unit_cost_paise, null);
+
+    if (!partName) {
+      return { error: "Each part requires part_name" };
+    }
+    if (qty === null) {
+      return { error: "Each part qty must be a positive number" };
+    }
+    if (unitCostPaise === null) {
+      return { error: "Each part unit_cost_paise must be a non-negative paise integer" };
+    }
+
+    const lineTotalPaise = computePartLineTotalPaise(qty, unitCostPaise);
+    if (lineTotalPaise === null) {
+      return { error: "Part line total overflow" };
+    }
+
+    normalized.push({
+      inventory_item_id: ensureId(row?.inventory_item_id) ? row.inventory_item_id : null,
+      part_name: partName,
+      qty,
+      unit_cost_paise: unitCostPaise,
+      line_total_paise: lineTotalPaise,
+      notes: ensureNonEmptyString(row?.notes) ? row.notes.trim() : null
+    });
+  }
+
+  return { data: normalized };
+}
+
+function sumEstimatePartLinesPaise(parts = []) {
+  return parts.reduce((sum, row) => sum + Number(row.line_total_paise || 0), 0);
+}
+
+async function loadLatestEstimateBundlesForCase(serviceClient, tenantId, caseId) {
+  const { data: estimateRows, error: estimateErr } = await serviceClient
+    .from("item_estimates")
+    .select("id, case_item_id, estimate_version_no, labor_amount_paise, spare_amount_paise, other_amount_paise, discount_amount_paise, base_bill_amount_paise, gst_rate_bps, gst_amount_paise, invoice_total_paise, estimate_status, decision, sent_at_utc, decision_due_at_utc, invoice_state, is_financial_locked, override_count, updated_at, created_at, case_items!inner(case_id)")
+    .eq("tenant_id", tenantId)
+    .eq("is_active", true)
+    .eq("case_items.case_id", caseId)
+    .order("created_at", { ascending: false });
+
+  if (estimateErr) {
+    return { error: "Unable to fetch item estimates for case" };
+  }
+
+  const latestByItemId = new Map();
+  for (const row of estimateRows || []) {
+    if (!latestByItemId.has(row.case_item_id)) {
+      latestByItemId.set(row.case_item_id, { ...row, parts: [] });
+    }
+  }
+
+  const estimateIds = Array.from(latestByItemId.values()).map((row) => row.id);
+  if (!estimateIds.length) {
+    return { data: latestByItemId };
+  }
+
+  const { data: partRows, error: partErr } = await serviceClient
+    .from("item_estimate_parts")
+    .select("id, item_estimate_id, case_item_id, inventory_item_id, part_name, qty, unit_cost_paise, line_total_paise, notes, created_at")
+    .eq("tenant_id", tenantId)
+    .eq("is_active", true)
+    .in("item_estimate_id", estimateIds)
+    .order("created_at", { ascending: true });
+
+  if (partErr) {
+    return { error: "Unable to fetch estimate part lines for case" };
+  }
+
+  for (const part of partRows || []) {
+    const estimate = Array.from(latestByItemId.values()).find((row) => row.id === part.item_estimate_id);
+    if (estimate) {
+      estimate.parts.push(part);
+    }
+  }
+
+  return { data: latestByItemId };
+}
+
 async function insertAuditLog(serviceClient, payload) {
   await serviceClient.from("audit_log").insert(payload);
 }
@@ -408,7 +508,7 @@ async function buildDailyCloseSnapshot(serviceClient, tenantId, businessDateLoca
     .from("case_items")
     .select("id, case_id, line_no, item_status, updated_at, cases!inner(case_no)")
     .eq("tenant_id", tenantId)
-    .in("item_status", ["Ready", "RejectedByCustomer"])
+    .in("item_status", ["Ready", "OutForDelivery", "RejectedByCustomer"])
     .eq("is_active", true)
     .order("updated_at", { ascending: false })
     .limit(100);
@@ -1027,6 +1127,42 @@ export default {
       }
     }
 
+    if (request.method === "GET" && url.pathname === "/v1/cases/recent") {
+      const auth = await requireAuth(request, env);
+      if (auth.error) return auth.error;
+      if (!requireRole(auth.user, ["Admin", "IT", "Staff"])) {
+        return json(403, { code: "FORBIDDEN", message: "Role not allowed" });
+      }
+
+      const limitRaw = toSafeInt(url.searchParams.get("limit"), 5);
+      const limit = Math.max(1, Math.min(10, limitRaw));
+
+      try {
+        const result = await withTimeout(
+          auth.serviceClient
+            .from("cases")
+            .select("id, case_no, customer_id, header_status, created_at, customers(name, phone)")
+            .eq("tenant_id", auth.user.tenantId)
+            .order("created_at", { ascending: false })
+            .limit(limit),
+          LIST_QUERY_TIMEOUT_MS,
+          "RECENT_CASES_QUERY_TIMEOUT"
+        );
+
+        if (result.error) {
+          return json(500, { code: "RECENT_CASES_FETCH_FAILED", message: "Unable to fetch recent cases" });
+        }
+
+        return json(200, {
+          code: "OK",
+          data: result.data || [],
+          pagination: { limit, offset: 0 }
+        });
+      } catch {
+        return json(504, { code: "RECENT_CASES_QUERY_TIMEOUT", message: "Recent cases query timed out" });
+      }
+    }
+
     if (request.method === "GET" && /^\/v1\/cases\/[^/]+$/.test(url.pathname)) {
       const auth = await requireAuth(request, env);
       if (auth.error) return auth.error;
@@ -1046,6 +1182,55 @@ export default {
       if (!data) return json(404, { code: "NOT_FOUND", message: "Case not found" });
 
       return json(200, { code: "OK", data });
+    }
+
+    if (request.method === "GET" && /^\/v1\/cases\/[^/]+\/status-workbench$/.test(url.pathname)) {
+      const auth = await requireAuth(request, env);
+      if (auth.error) return auth.error;
+      if (!requireRole(auth.user, ["Admin", "IT", "Staff"])) {
+        return json(403, { code: "FORBIDDEN", message: "Role not allowed" });
+      }
+
+      const caseId = url.pathname.split("/")[3];
+      const svc = auth.serviceClient;
+
+      const { data: caseRow, error: caseErr } = await svc
+        .from("cases")
+        .select("id, case_no, customer_id, header_status, intake_mode, total_units_received, priority, notes, received_at_utc, received_business_date_local, customers(name, phone)")
+        .eq("tenant_id", auth.user.tenantId)
+        .eq("id", caseId)
+        .maybeSingle();
+
+      if (caseErr) return json(500, { code: "CASE_FETCH_FAILED", message: "Unable to fetch case" });
+      if (!caseRow) return json(404, { code: "NOT_FOUND", message: "Case not found" });
+
+      const { data: itemRows, error: itemErr } = await svc
+        .from("case_items")
+        .select("id, case_id, line_no, item_category, brand, model, serial_no, reported_issue, diagnosis_notes, item_status, promised_date_local, ready_at_utc, delivered_at_utc")
+        .eq("tenant_id", auth.user.tenantId)
+        .eq("case_id", caseId)
+        .order("line_no", { ascending: true });
+
+      if (itemErr) return json(500, { code: "CASE_ITEMS_FETCH_FAILED", message: "Unable to fetch case items" });
+
+      const estimateBundle = await loadLatestEstimateBundlesForCase(svc, auth.user.tenantId, caseId);
+      if (estimateBundle.error) {
+        return json(500, { code: "ESTIMATE_FETCH_FAILED", message: estimateBundle.error });
+      }
+
+      const latestByItemId = estimateBundle.data || new Map();
+      const items = (itemRows || []).map((row) => ({
+        ...row,
+        latest_estimate: latestByItemId.get(row.id) || null
+      }));
+
+      return json(200, {
+        code: "OK",
+        data: {
+          case: caseRow,
+          items
+        }
+      });
     }
 
     if (request.method === "PATCH" && /^\/v1\/cases\/[^/]+$/.test(url.pathname)) {
@@ -1347,6 +1532,238 @@ export default {
       });
     }
 
+    if (request.method === "POST" && /^\/v1\/cases\/[^/]+\/items\/[^/]+\/estimate-workbench$/.test(url.pathname)) {
+      const auth = await requireAuth(request, env);
+      if (auth.error) return auth.error;
+      if (!requireRole(auth.user, ["Admin", "IT", "Staff"])) {
+        return json(403, { code: "FORBIDDEN", message: "Role not allowed" });
+      }
+
+      const parts = url.pathname.split("/");
+      const caseId = parts[3];
+      const itemId = parts[5];
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return json(400, { code: "INVALID_JSON", message: "Request body must be valid JSON" });
+      }
+
+      const svc = auth.serviceClient;
+      const { data: caseItem, error: caseItemErr } = await svc
+        .from("case_items")
+        .select("id, case_id, line_no, item_status, is_active")
+        .eq("tenant_id", auth.user.tenantId)
+        .eq("id", itemId)
+        .eq("case_id", caseId)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (caseItemErr) return json(500, { code: "CASE_ITEM_FETCH_FAILED", message: "Unable to load case item" });
+      if (!caseItem) return json(404, { code: "NOT_FOUND", message: "Case item not found for case" });
+
+      if (["Delivered", "Cancelled"].includes(caseItem.item_status)) {
+        return json(409, { code: "TERMINAL_STATUS", message: "Estimate workbench is not allowed for delivered or cancelled items" });
+      }
+
+      const partLinesResult = normalizeEstimatePartLines(body?.parts);
+      if (partLinesResult.error) {
+        return json(400, { code: "VALIDATION_ERROR", message: partLinesResult.error });
+      }
+
+      const normalizedParts = partLinesResult.data || [];
+      const inventoryIds = Array.from(new Set(normalizedParts.map((row) => row.inventory_item_id).filter(Boolean)));
+      if (inventoryIds.length) {
+        const { data: inventoryRows, error: inventoryErr } = await svc
+          .from("inventory_items")
+          .select("id")
+          .eq("tenant_id", auth.user.tenantId)
+          .in("id", inventoryIds);
+
+        if (inventoryErr) {
+          return json(500, { code: "INVENTORY_FETCH_FAILED", message: "Unable to validate inventory-linked estimate parts" });
+        }
+
+        const foundIds = new Set((inventoryRows || []).map((row) => row.id));
+        const missingId = inventoryIds.find((id) => !foundIds.has(id));
+        if (missingId) {
+          return json(400, { code: "VALIDATION_ERROR", message: "One or more inventory_item_id values are invalid for tenant" });
+        }
+      }
+
+      const defaultGstRate = toSafeInt(await getSettingValue(svc, auth.user.tenantId, "gst_rate_bps", 1800), 1800);
+      const roundingModeSetting = await getSettingValue(svc, auth.user.tenantId, "gst_rounding_mode", "invoice_level");
+      const roundingMode = ensureNonEmptyString(roundingModeSetting)
+        ? String(roundingModeSetting)
+        : "invoice_level";
+
+      const spareAmountPaise = sumEstimatePartLinesPaise(normalizedParts);
+      const gstRequired = body?.gst_required === undefined ? true : Boolean(body.gst_required);
+      const amountResult = computeInvoiceAmounts({
+        labor_amount_paise: body?.labor_amount_paise,
+        spare_amount_paise: spareAmountPaise,
+        other_amount_paise: body?.other_amount_paise,
+        discount_amount_paise: body?.discount_amount_paise,
+        gst_rate_bps: gstRequired ? (body?.gst_rate_bps ?? defaultGstRate) : 0
+      });
+
+      if (amountResult.error) {
+        return json(400, { code: "VALIDATION_ERROR", message: amountResult.error });
+      }
+
+      if ((amountResult.data.base_bill_amount_paise || 0) <= 0) {
+        return json(400, { code: "VALIDATION_ERROR", message: "Estimate must have a positive base bill before customer approval" });
+      }
+
+      const { data: latestVersionRows, error: versionErr } = await svc
+        .from("item_estimates")
+        .select("estimate_version_no")
+        .eq("tenant_id", auth.user.tenantId)
+        .eq("case_item_id", itemId)
+        .order("estimate_version_no", { ascending: false })
+        .limit(1);
+
+      if (versionErr) {
+        return json(500, { code: "ESTIMATE_VERSION_FAILED", message: "Unable to resolve estimate version" });
+      }
+
+      const nextVersion = ((latestVersionRows && latestVersionRows[0]?.estimate_version_no) || 0) + 1;
+      const nowIso = new Date().toISOString();
+      const sendForDecision = Boolean(body?.send_for_decision);
+      const estimateStatus = sendForDecision ? "Sent" : "Draft";
+
+      const insertPayload = {
+        tenant_id: auth.user.tenantId,
+        case_item_id: itemId,
+        estimate_version_no: nextVersion,
+        ...amountResult.data,
+        rounding_mode_snapshot: roundingMode,
+        estimate_status: estimateStatus,
+        decision: "Pending",
+        sent_at_utc: sendForDecision ? nowIso : null,
+        decision_due_at_utc: toIsoStringSafe(body?.decision_due_at_utc),
+        created_at: nowIso,
+        updated_at: nowIso,
+        created_by: auth.user.id,
+        updated_by: auth.user.id,
+        is_active: true
+      };
+
+      const { data: createdEstimate, error: createErr } = await svc
+        .from("item_estimates")
+        .insert(insertPayload)
+        .select("id, case_item_id, estimate_version_no, labor_amount_paise, spare_amount_paise, other_amount_paise, discount_amount_paise, base_bill_amount_paise, gst_rate_bps, gst_amount_paise, invoice_total_paise, estimate_status, decision, invoice_state, is_financial_locked, sent_at_utc, decision_due_at_utc")
+        .single();
+
+      if (createErr) {
+        return json(500, { code: "ESTIMATE_CREATE_FAILED", message: "Unable to create estimate from status workbench" });
+      }
+
+      let createdParts = [];
+      if (normalizedParts.length) {
+        const partPayload = normalizedParts.map((row) => ({
+          tenant_id: auth.user.tenantId,
+          item_estimate_id: createdEstimate.id,
+          case_item_id: itemId,
+          inventory_item_id: row.inventory_item_id,
+          part_name: row.part_name,
+          qty: row.qty,
+          unit_cost_paise: row.unit_cost_paise,
+          line_total_paise: row.line_total_paise,
+          notes: row.notes,
+          is_active: true,
+          created_at: nowIso,
+          updated_at: nowIso,
+          created_by: auth.user.id,
+          updated_by: auth.user.id
+        }));
+
+        const { data: insertedParts, error: partCreateErr } = await svc
+          .from("item_estimate_parts")
+          .insert(partPayload)
+          .select("id, item_estimate_id, case_item_id, inventory_item_id, part_name, qty, unit_cost_paise, line_total_paise, notes, created_at")
+          .order("created_at", { ascending: true });
+
+        if (partCreateErr) {
+          return json(500, { code: "ESTIMATE_PART_CREATE_FAILED", message: "Estimate created but part-line insert failed" });
+        }
+
+        createdParts = insertedParts || [];
+      }
+
+      let itemStatusAfter = caseItem.item_status;
+      let headerStatus = null;
+      if (sendForDecision && caseItem.item_status === "Diagnosis") {
+        const { error: statusErr } = await svc
+          .from("case_items")
+          .update({
+            item_status: "WaitingApproval",
+            updated_at: nowIso,
+            updated_by: auth.user.id
+          })
+          .eq("tenant_id", auth.user.tenantId)
+          .eq("id", itemId)
+          .eq("case_id", caseId);
+
+        if (statusErr) {
+          return json(500, { code: "CASE_ITEM_STATUS_UPDATE_FAILED", message: "Estimate saved but item could not move to waiting approval" });
+        }
+
+        const histErr = await writeCaseStatusHistory(svc, {
+          tenant_id: auth.user.tenantId,
+          case_id: caseId,
+          case_item_id: itemId,
+          from_status: caseItem.item_status,
+          to_status: "WaitingApproval",
+          changed_at_utc: nowIso,
+          changed_by: auth.user.id,
+          note: ensureNonEmptyString(body?.note) ? body.note.trim() : "Estimate sent for customer approval"
+        });
+
+        if (histErr) {
+          return json(500, { code: "CASE_STATUS_HISTORY_FAILED", message: "Estimate saved and item moved, but history insert failed" });
+        }
+
+        const { data: statuses } = await svc
+          .from("case_items")
+          .select("item_status")
+          .eq("tenant_id", auth.user.tenantId)
+          .eq("case_id", caseId)
+          .eq("is_active", true);
+
+        headerStatus = deriveHeaderStatus((statuses || []).map((row) => row.item_status));
+        await svc
+          .from("cases")
+          .update({ header_status: headerStatus, updated_at: nowIso, updated_by: auth.user.id })
+          .eq("tenant_id", auth.user.tenantId)
+          .eq("id", caseId);
+
+        itemStatusAfter = "WaitingApproval";
+      } else {
+        const { data: caseRow } = await svc
+          .from("cases")
+          .select("header_status")
+          .eq("tenant_id", auth.user.tenantId)
+          .eq("id", caseId)
+          .maybeSingle();
+        headerStatus = caseRow?.header_status || null;
+      }
+
+      return json(201, {
+        code: "OK",
+        message: sendForDecision ? "Estimate saved and customer approval flow prepared" : "Estimate draft saved",
+        data: {
+          case_id: caseId,
+          case_item_id: itemId,
+          item_status: itemStatusAfter,
+          header_status: headerStatus,
+          estimate: createdEstimate,
+          parts: createdParts,
+          workflow_action: sendForDecision && caseItem.item_status === "Diagnosis" ? "WaitingApproval" : null
+        }
+      });
+    }
+
     if (request.method === "GET" && /^\/v1\/cases\/[^/]+\/estimates$/.test(url.pathname)) {
       const auth = await requireAuth(request, env);
       if (auth.error) return auth.error;
@@ -1389,13 +1806,13 @@ export default {
 
       let query = auth.serviceClient
         .from("inventory_items")
-        .select("id, sku, item_name, uom, current_stock_qty, reorder_level_qty, default_unit_cost_paise, valuation_method, is_active, created_at, updated_at")
+        .select("id, sku, item_name, storage_location, uom, current_stock_qty, reorder_level_qty, default_unit_cost_paise, valuation_method, is_active, created_at, updated_at")
         .eq("tenant_id", auth.user.tenantId)
         .order("updated_at", { ascending: false })
         .range(offset, offset + limit - 1);
 
       if (q) {
-        query = query.or(`item_name.ilike.%${q}%,sku.ilike.%${q}%`);
+        query = query.or(`item_name.ilike.%${q}%,sku.ilike.%${q}%,storage_location.ilike.%${q}%`);
       }
 
       if (lowStockOnly) {
@@ -1453,6 +1870,7 @@ export default {
         tenant_id: auth.user.tenantId,
         sku: ensureNonEmptyString(body?.sku) ? body.sku.trim() : null,
         item_name: body.item_name.trim(),
+        storage_location: ensureNonEmptyString(body?.storage_location) ? body.storage_location.trim() : null,
         uom: ensureNonEmptyString(body?.uom) ? body.uom.trim() : "pcs",
         current_stock_qty: currentStockQty,
         reorder_level_qty: reorderLevelQty,
@@ -1468,7 +1886,7 @@ export default {
       const { data: created, error: createErr } = await auth.serviceClient
         .from("inventory_items")
         .insert(payload)
-        .select("id, sku, item_name, uom, current_stock_qty, reorder_level_qty, default_unit_cost_paise, valuation_method, is_active, created_at")
+        .select("id, sku, item_name, storage_location, uom, current_stock_qty, reorder_level_qty, default_unit_cost_paise, valuation_method, is_active, created_at")
         .single();
 
       if (createErr) {
@@ -1501,6 +1919,7 @@ export default {
         updated_at: new Date().toISOString(),
         updated_by: auth.user.id
       };
+      let manualStockAdjustment = null;
 
       if (body?.sku !== undefined) patch.sku = ensureNonEmptyString(body.sku) ? body.sku.trim() : null;
       if (body?.item_name !== undefined) {
@@ -1509,7 +1928,40 @@ export default {
         }
         patch.item_name = body.item_name.trim();
       }
+      if (body?.storage_location !== undefined) patch.storage_location = ensureNonEmptyString(body.storage_location) ? body.storage_location.trim() : null;
       if (body?.uom !== undefined) patch.uom = ensureNonEmptyString(body.uom) ? body.uom.trim() : "pcs";
+
+      if (body?.current_stock_qty !== undefined) {
+        const nextStockQty = parseNumericQty(body.current_stock_qty, null);
+        if (nextStockQty === null || nextStockQty < 0) {
+          return json(400, { code: "VALIDATION_ERROR", message: "current_stock_qty must be non-negative" });
+        }
+
+        const { data: existingItem, error: existingItemErr } = await auth.serviceClient
+          .from("inventory_items")
+          .select("id, current_stock_qty, default_unit_cost_paise")
+          .eq("tenant_id", auth.user.tenantId)
+          .eq("id", inventoryItemId)
+          .maybeSingle();
+
+        if (existingItemErr) return json(500, { code: "INVENTORY_FETCH_FAILED", message: "Unable to fetch inventory item before stock update" });
+        if (!existingItem) return json(404, { code: "NOT_FOUND", message: "Inventory item not found" });
+
+        const currentStockQty = Number(existingItem.current_stock_qty || 0);
+        const stockDelta = Number((nextStockQty - currentStockQty).toFixed(3));
+        if (stockDelta !== 0) {
+          const unitCostPaise = body?.default_unit_cost_paise !== undefined
+            ? parsePaise(body.default_unit_cost_paise, existingItem.default_unit_cost_paise || 0)
+            : Number(existingItem.default_unit_cost_paise || 0);
+          manualStockAdjustment = {
+            txn_type: stockDelta > 0 ? "ADJUST_IN" : "ADJUST_OUT",
+            qty: Math.abs(stockDelta),
+            unit_cost_paise: unitCostPaise === null ? 0 : unitCostPaise,
+            balance_after_qty: nextStockQty
+          };
+        }
+        patch.current_stock_qty = nextStockQty;
+      }
 
       if (body?.reorder_level_qty !== undefined) {
         const reorderQty = parseNumericQty(body.reorder_level_qty, null);
@@ -1542,7 +1994,7 @@ export default {
         .update(patch)
         .eq("tenant_id", auth.user.tenantId)
         .eq("id", inventoryItemId)
-        .select("id, sku, item_name, uom, current_stock_qty, reorder_level_qty, default_unit_cost_paise, valuation_method, is_active, updated_at")
+        .select("id, sku, item_name, storage_location, uom, current_stock_qty, reorder_level_qty, default_unit_cost_paise, valuation_method, is_active, updated_at")
         .maybeSingle();
 
       if (updateErr) {
@@ -1554,7 +2006,30 @@ export default {
       }
       if (!updated) return json(404, { code: "NOT_FOUND", message: "Inventory item not found" });
 
-      return json(200, { code: "OK", message: "Inventory item updated", data: updated });
+      let ledgerWarning = null;
+      if (manualStockAdjustment) {
+        const totalCostPaise = Math.round(manualStockAdjustment.qty * manualStockAdjustment.unit_cost_paise);
+        const { error: ledgerErr } = await auth.serviceClient
+          .from("stock_ledger")
+          .insert({
+            tenant_id: auth.user.tenantId,
+            inventory_item_id: inventoryItemId,
+            txn_type: manualStockAdjustment.txn_type,
+            ref_entity: "inventory_manual_update",
+            ref_id: inventoryItemId,
+            qty: manualStockAdjustment.qty,
+            unit_cost_paise: manualStockAdjustment.unit_cost_paise,
+            total_cost_paise: totalCostPaise,
+            balance_after_qty: manualStockAdjustment.balance_after_qty,
+            txn_at_utc: patch.updated_at,
+            created_at: patch.updated_at,
+            created_by: auth.user.id
+          });
+
+        if (ledgerErr) ledgerWarning = "Stock updated, but ledger adjustment entry could not be recorded";
+      }
+
+      return json(200, { code: "OK", message: "Inventory item updated", data: updated, ledger_warning: ledgerWarning });
     }
 
     if (request.method === "GET" && url.pathname === "/v1/inventory/ledger") {
@@ -2474,7 +2949,7 @@ export default {
       if (itemStatusParam) {
         statuses = [itemStatusParam];
       } else if (queue === "pending_pickups") {
-        statuses = ["Ready", "RejectedByCustomer"];
+        statuses = ["Ready", "OutForDelivery", "RejectedByCustomer"];
       } else {
         statuses = ["WaitingApproval"];
       }
@@ -2915,7 +3390,7 @@ export default {
               .from("case_items")
               .select("id")
               .eq("tenant_id", auth.user.tenantId)
-              .in("item_status", ["Ready", "RejectedByCustomer"])
+              .in("item_status", ["Ready", "OutForDelivery", "RejectedByCustomer"])
               .eq("is_active", true)
               .limit(rowLimit),
             caseSliceTimeoutMs,

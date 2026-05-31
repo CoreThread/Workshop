@@ -38,7 +38,7 @@
         <div>
           <h2>Login</h2>
           <label>Email</label>
-          <input id="email" value="admin@rajeshelec.local" />
+          <input id="email" value="staff@rajeshelec.local" />
           <label>Password</label>
           <input id="password" type="password" value="Admin@12345!" />
           <div class="row">
@@ -46,61 +46,71 @@
             <button id="logoutBtn" class="ghost">Logout</button>
           </div>
           <p id="whoami" class="hint">Not logged in</p>
-          <p id="loginGateHint" class="hint">Login required to open operational lanes.</p>
+          <p id="loginGateHint" class="hint">Login required to open the workspace.</p>
         </div>
       </div>
     </section>
 
     <div id="appWorkspace" class="is-hidden">
-    <section class="card quick-strip" id="quickActionsStrip">
-      <h2>Quick Actions</h2>
-      <p class="hint">Primary navigation stays here: daily case flow first, then backup visibility, then secondary workspaces.</p>
-      <div class="quick-actions-stack">
-        <section class="quick-actions-group" aria-label="Primary operations">
-          <div class="quick-actions-group-head">
-            <h3>Daily Core</h3>
-            <p class="hint">Short, scan-fast actions for the main workshop flow.</p>
-          </div>
+    <section class="home-console" id="homeConsole">
+      <div class="home-console-head">
+        <div>
+          <h2>Workshop Cases</h2>
+        </div>
+        <section class="home-actions" aria-label="Primary operations">
           <div class="quick-actions-grid quick-actions-grid-primary">
-            <button id="quickCreateCaseBtn">New Case</button>
-            <button id="quickSearchCaseBtn" class="ghost">Find Case</button>
-            <button id="quickOpenStatusBtn" class="ghost">Status</button>
-            <button id="quickLoadFollowupsBtn" class="ghost">Follow-up</button>
-            <button id="quickRunDailyCloseBtn" class="ghost">Close Day</button>
-            <button id="quickLoadArchiveIndexBtn" class="ghost">Archive</button>
-          </div>
-        </section>
-
-        <section class="quick-actions-group" aria-label="Secondary workspaces">
-          <div class="quick-actions-group-head">
-            <h3>Other Workspaces</h3>
-            <p class="hint">Secondary lanes stay reachable without overpowering daily work.</p>
-          </div>
-          <div class="quick-actions-grid quick-actions-grid-secondary">
-            <button id="quickBillingBtn" class="ghost">Billing</button>
-            <button id="quickInventoryBtn" class="ghost">Stock</button>
-            <button id="quickAnalyticsBtn" class="ghost">Analytics</button>
-            <button id="quickHrBtn" class="ghost">HR</button>
+            <button id="quickCreateCaseBtn" class="home-action home-action-primary">New Case</button>
+            <button id="quickSearchCaseBtn" class="home-action">Find Case Details</button>
+            <button id="quickInventoryBtn" class="home-action">Inventory</button>
+            <button id="quickLoadFollowupsBtn" class="ghost case-only-hidden">Follow-up</button>
+            <button id="quickRunDailyCloseBtn" class="ghost case-only-hidden">Close Day</button>
+            <button id="quickLoadArchiveIndexBtn" class="ghost case-only-hidden">Backup</button>
           </div>
         </section>
       </div>
-      <p id="quickActionsHint" class="hint"></p>
+
+      <div class="quick-actions-stack case-only-hidden">
+        <details class="quick-actions-group quick-actions-group-collapsible" aria-label="Secondary workspaces">
+          <summary>
+            <div class="quick-actions-group-head quick-actions-group-head-inline">
+              <div>
+                <h3>Other Workspaces</h3>
+              </div>
+              <span class="quick-actions-toggle-label">Open</span>
+            </div>
+          </summary>
+          <div class="quick-actions-grid quick-actions-grid-secondary">
+            <button id="quickBillingBtn" class="ghost">Billing</button>
+            <button id="quickAnalyticsBtn" class="ghost">Analytics</button>
+            <button id="quickHrBtn" class="ghost">HR</button>
+          </div>
+        </details>
+      </div>
+      <section class="active-cases-panel" aria-label="Active cases">
+        <div class="quick-actions-group-head">
+          <h3>Active Cases</h3>
+        </div>
+        <div id="recentCasesList" class="active-cases-list"></div>
+      </section>
     </section>
 
+    <section class="case-desk-surface is-hidden" id="caseDeskSurface" aria-label="Case workspace">
+      <div class="case-surface-bar">
+        <button id="backHomeBtn" type="button" class="ghost case-back-btn">Back</button>
+        <div>
+          <h2 id="caseSurfaceTitle">New Case</h2>
+        </div>
+      </div>
       <div class="lanes">
         <section class="lane" id="lane-primary">
-          <div class="lane-head">
-            <h2>Lane 1: Core Operations</h2>
-            <p class="hint">Daily first: case flow, follow-up, close snapshot, backup visibility.</p>
-          </div>
+          <div class="lane-head case-only-hidden"></div>
 
-          <details class="card" id="module-case" open>
-            <summary><span id="moduleCaseSummary">Case Intake + Status (Phase 2)</span></summary>
+          <details class="workspace-panel" id="module-case" open>
+            <summary><span id="moduleCaseSummary">Case Desk</span></summary>
             <div id="caseWorkflowChrome">
-              <p id="caseWorkflowHint" class="hint">Work in sequence: create case, then search/use case context, then update item status.</p>
               <div id="caseFlowSwitcher" class="case-flow-switcher case-flow-switcher-two" role="tablist" aria-label="Case workflow switcher">
-              <button type="button" id="casePanelCreateBtn" class="case-panel-tab is-active" data-case-panel-target="case-panel-create" role="tab" aria-selected="true">Step 1: Create Case</button>
-              <button type="button" id="casePanelStatusBtn" class="case-panel-tab" data-case-panel-target="case-panel-status" role="tab" aria-selected="false">Step 2: Update Status</button>
+              <button type="button" id="casePanelCreateBtn" class="case-panel-tab is-active" data-case-panel-target="case-panel-create" role="tab" aria-selected="true">New Case</button>
+              <button type="button" id="casePanelStatusBtn" class="case-panel-tab" data-case-panel-target="case-panel-status" role="tab" aria-selected="false">Case Status</button>
               </div>
             </div>
 
@@ -132,8 +142,7 @@
               </section>
 
               <section class="case-flow-block case-panel" id="case-panel-search">
-                <h3>Search Existing Cases</h3>
-                <p class="hint">Search stays separate from the create steps so operators can jump directly to an existing case.</p>
+                <h3>Find Case Details</h3>
                 <div class="workflow-grid">
                   <div>
                     <label>Search By Case No</label>
@@ -144,47 +153,43 @@
                     <input id="searchPhone" placeholder="9876500011" />
                   </div>
                 </div>
-                <button id="searchBtn" class="ghost">Search Cases</button>
+                <button id="searchBtn" class="ghost">Find Case</button>
                 <div id="searchResults" aria-live="polite"></div>
               </section>
 
             <section class="case-flow-block case-panel" id="case-panel-status">
-              <h3>Case Status Update</h3>
-              <div class="workflow-grid">
-                <div>
-                  <label>Case ID</label>
-                  <input id="statusCaseId" />
-                </div>
-                <div>
-                  <label>Refresh Case Details</label>
-                  <button id="loadCaseItemsBtn" type="button" class="ghost">Refresh Case Details</button>
-                </div>
-                <div>
-                  <label>Current Case No</label>
-                  <input id="statusCaseNo" readonly />
-                </div>
-                <div>
-                  <label>Case Header Status</label>
-                  <input id="statusHeaderStatus" readonly />
-                </div>
-              </div>
+              <input id="statusCaseId" type="hidden" />
               <input id="statusItemId" type="hidden" />
+              <input id="statusCaseNo" type="hidden" />
+              <input id="statusHeaderStatus" type="hidden" />
 
-              <div class="status-progress-shell">
-                <div id="statusProgressBar" class="status-progress-bar"></div>
-                <p id="statusProgressLabel" class="hint">Select To Status in a row to preview status path.</p>
+              <div id="statusCaseBanner" class="status-case-banner">
+                <div class="status-case-banner-info">
+                  <span id="statusBannerCaseNo" class="status-banner-case-no">—</span>
+                  <span id="statusBannerHeaderStatus" class="status-banner-header-status">—</span>
+                </div>
+                <div class="status-case-banner-actions">
+                  <button id="historyBtn" class="ghost">Timeline</button>
+                </div>
               </div>
 
-              <button id="historyBtn" class="ghost">View Status Timeline</button>
+              <div id="caseDetailSummary" class="case-detail-summary" aria-live="polite"></div>
+
+              <div class="case-notes-box">
+                <label for="caseNotes">Notes</label>
+                <textarea id="caseNotes" rows="3" placeholder="Customer update, repair note, or pickup instruction"></textarea>
+                <button id="saveCaseNotesBtn" type="button" class="ghost">Save Note</button>
+              </div>
+
               <p id="statusResult" class="hint form-feedback" aria-live="polite"></p>
 
-              <div id="caseStatusItemsBoard" class="case-status-group-board"></div>
+              <div id="caseStatusItemsBoard" class="case-status-items-board"></div>
               <div id="historyTimeline" class="history-timeline"></div>
             </section>
           </details>
 
           <details class="card" id="module-followup">
-            <summary>Follow-up + Daily Close (Phase 3)</summary>
+            <summary>Follow-up + Daily Close</summary>
             <p class="hint">Run in sequence: queue -> note -> daily close.</p>
             <div class="module-step-switcher" role="tablist" aria-label="Follow-up workflow switcher">
               <button type="button" class="module-step-tab is-active" data-step-group="followup" data-step-target="followup-panel-queue" role="tab" aria-selected="true">1. Queue</button>
@@ -213,8 +218,9 @@
 
             <section class="case-flow-block step-panel" id="followup-panel-note" data-step-group="followup">
               <h3>Save Follow-up Note</h3>
-              <label>Case ID (for note update)</label>
-              <input id="followupCaseId" />
+              <input id="followupCaseId" type="hidden" />
+              <label>Case No</label>
+              <input id="followupCaseNo" readonly />
               <label>Follow-up Note</label>
               <input id="followupNote" placeholder="Called customer" />
               <button id="saveFollowupNoteBtn" class="ghost">Save Follow-up Note</button>
@@ -234,8 +240,7 @@
           </details>
 
           <details class="card" id="module-archive">
-            <summary>Backup + Archive Admin (Phase 6)</summary>
-            <p class="hint">Run in sequence: usage snapshot -> trigger check -> index lookup and restore.</p>
+            <summary>Backup Status</summary>
             <div class="module-step-switcher" role="tablist" aria-label="Archive workflow switcher">
               <button type="button" class="module-step-tab is-active" data-step-group="archive" data-step-target="archive-panel-usage" role="tab" aria-selected="true">1. DB Usage</button>
               <button type="button" class="module-step-tab ghost" data-step-group="archive" data-step-target="archive-panel-trigger" role="tab" aria-selected="false">2. Trigger Check</button>
@@ -243,8 +248,8 @@
             </div>
 
             <section class="case-flow-block step-panel step-panel-active" id="archive-panel-usage" data-step-group="archive">
-              <h3>Save DB Usage Snapshot</h3>
-              <div class="workflow-grid">
+              <h3>Backup Status</h3>
+              <div class="workflow-grid archive-write-controls basic-mode-hidden">
                 <div>
                   <label>Usage MB</label>
                   <input id="archiveUsageMb" value="475" />
@@ -262,9 +267,9 @@
                   <input id="archiveUsageSource" value="ui-manual" />
                 </div>
               </div>
-              <div class="row">
+              <div class="row archive-usage-actions">
                 <button id="saveDbUsageBtn">Save DB Usage Snapshot</button>
-                <button id="loadDbUsageBtn" class="ghost">Load DB Usage</button>
+                <button id="loadDbUsageBtn" class="ghost">Load Backup Status</button>
               </div>
             </section>
 
@@ -320,7 +325,7 @@
           </details>
 
           <details class="card phase4-card" id="module-billing">
-            <summary>Estimate + Billing Lock (Phase 4)</summary>
+            <summary>Estimate + Billing Lock</summary>
             <p class="hint">Run in sequence: context + estimate -> decision -> finalize -> override/credit note -> snapshot checks.</p>
             <div class="module-step-switcher module-step-switcher-wide" role="tablist" aria-label="Billing workflow switcher">
               <button type="button" class="module-step-tab is-active" data-step-group="billing" data-step-target="billing-panel-estimate" role="tab" aria-selected="true">1. Estimate</button>
@@ -333,11 +338,9 @@
 
             <section class="case-flow-block step-panel step-panel-active" id="billing-panel-estimate" data-step-group="billing">
               <h3>Estimate Context + Input</h3>
+              <input id="estimateCaseId" type="hidden" />
               <div class="workflow-grid">
-                <div>
-                  <label>Case ID</label>
-                  <input id="estimateCaseId" placeholder="case_id" />
-                </div>
+                <div><label>Case No</label><input id="estimateCaseNo" placeholder="Sync from status" readonly /></div>
                 <div>
                   <label>Case Item ID</label>
                   <input id="estimateItemId" placeholder="case_item_id" />
@@ -435,119 +438,72 @@
         </section>
 
         <section class="lane" id="lane-inventory">
-          <div class="lane-head">
-            <h2>Lane 2: Inventory Operations</h2>
-            <p class="hint">After case workflow is stable, run inventory create/list/consume with ledger verification.</p>
+          <div class="inventory-surface">
+            <div class="inventory-topbar">
+              <div>
+                <h2>Inventory</h2>
+                <p class="hint">Search parts, stock, and shelf place.</p>
+              </div>
+              <span id="inventoryRoleChip" class="inventory-role-chip">View</span>
+            </div>
+
+            <section class="inventory-panel inventory-search-panel" aria-label="Inventory search">
+              <div class="inventory-search-row">
+                <div>
+                  <label>Search Part</label>
+                  <input id="inventoryQuery" placeholder="capacitor / SKU" />
+                </div>
+                <div>
+                  <label>Low Stock</label>
+                  <select id="inventoryLowStockOnly"><option value="false" selected>All Stock</option><option value="true">Low Stock</option></select>
+                </div>
+                <div class="inventory-search-action">
+                  <button id="loadInventoryBtn" class="ghost">Search Inventory</button>
+                </div>
+              </div>
+              <div id="inventorySummary" class="inventory-summary-row"></div>
+              <div id="inventoryList" class="inventory-results"></div>
+            </section>
+
+            <section class="inventory-panel inventory-admin-panel inventory-admin-hidden" aria-label="Update inventory">
+              <div class="inventory-panel-head">
+                <h3>Update Inventory</h3>
+                <button id="clearInventoryFormBtn" type="button" class="ghost">New Item</button>
+              </div>
+              <input id="inventoryEditId" type="hidden" />
+              <input id="phase5CaseId" type="hidden" />
+              <input id="phase5CaseNo" type="hidden" />
+              <input id="phase5CaseItemId" type="hidden" />
+              <input id="phase5InventoryItemId" type="hidden" />
+              <div class="workflow-grid inventory-edit-grid">
+                <div><label>SKU</label><input id="inventorySku" placeholder="FAN-CAP-2.5" /></div>
+                <div><label>Item Name</label><input id="inventoryName" placeholder="Fan Capacitor 2.5uF" /></div>
+                <div><label>Place</label><input id="inventoryLocation" placeholder="Rack A / Box 2" /></div>
+                <div><label>UOM</label><input id="inventoryUom" value="pcs" /></div>
+                <div><label>Stock Qty</label><input id="inventoryStockQty" value="0" /></div>
+                <div><label>Reorder Qty</label><input id="inventoryReorderQty" value="5" /></div>
+                <div><label>Unit Cost (paise)</label><input id="inventoryUnitCostPaise" value="1500" /></div>
+                <div><label>Valuation</label><select id="inventoryValuation"><option>WEIGHTED_AVERAGE</option><option>FIFO</option></select></div>
+                <div><label>Status</label><select id="inventoryActive"><option value="true" selected>Active</option><option value="false">Inactive</option></select></div>
+              </div>
+              <button id="createInventoryBtn">Save Inventory</button>
+              <p id="inventoryCreateResult" class="hint form-feedback" aria-live="polite"></p>
+              <p id="phase5StockWarning" class="hint stock-warning"></p>
+              <pre id="phase5Result" class="inventory-admin-log"></pre>
+              <pre id="phase5LedgerResult" class="inventory-admin-log"></pre>
+              <pre id="phase5CorrectionResult" class="inventory-admin-log"></pre>
+              <pre id="phase5SmokePayloadResult" class="inventory-admin-log"></pre>
+            </section>
           </div>
-
-          <details class="card" open>
-            <summary>Inventory + Case-linked Consumption (Phase 5)</summary>
-            <button id="runPhase5SmokePayloadBtn" class="ghost">Run Phase5 Smoke Payload Generator</button>
-            <pre id="phase5SmokePayloadResult"></pre>
-
-            <div class="workflow-grid">
-              <div><label>Case ID</label><input id="phase5CaseId" placeholder="case_id" /></div>
-              <div><label>Case Item ID</label><input id="phase5CaseItemId" placeholder="case_item_id" /></div>
-              <div><label>Inventory Item ID</label><input id="phase5InventoryItemId" placeholder="inventory_item_id" /></div>
-              <div class="context-actions"><button id="phase5SyncCaseBtn" class="ghost">Sync Case Context from Status Panel</button></div>
-            </div>
-            <p id="phase5StockWarning" class="hint stock-warning"></p>
-
-            <h3>Create Inventory Item</h3>
-            <div class="workflow-grid">
-              <div><label>SKU</label><input id="inventorySku" placeholder="FAN-CAP-2.5" /></div>
-              <div><label>Item Name</label><input id="inventoryName" placeholder="Fan Capacitor 2.5uF" /></div>
-              <div><label>UOM</label><input id="inventoryUom" value="pcs" /></div>
-              <div><label>Current Stock Qty</label><input id="inventoryStockQty" value="25" /></div>
-              <div><label>Reorder Level Qty</label><input id="inventoryReorderQty" value="5" /></div>
-              <div><label>Default Unit Cost (paise)</label><input id="inventoryUnitCostPaise" value="1500" /></div>
-              <div><label>Valuation Method</label><select id="inventoryValuation"><option>WEIGHTED_AVERAGE</option><option>FIFO</option></select></div>
-            </div>
-            <button id="createInventoryBtn">Create Inventory Item</button>
-            <p id="inventoryCreateResult" class="hint"></p>
-
-            <h3>List/Search Inventory</h3>
-            <div class="workflow-grid">
-              <div><label>Search (name or SKU)</label><input id="inventoryQuery" placeholder="capacitor" /></div>
-              <div><label>Low Stock Only</label><select id="inventoryLowStockOnly"><option value="false" selected>false</option><option value="true">true</option></select></div>
-            </div>
-            <button id="loadInventoryBtn" class="ghost">Load Inventory</button>
-            <div id="inventoryList"></div>
-
-            <h3>Consume on Case</h3>
-            <div class="workflow-grid">
-              <div><label>Qty</label><input id="consumeQty" value="1" /></div>
-              <div><label>UOM (optional)</label><input id="consumeUom" placeholder="pcs" /></div>
-              <div><label>Unit Cost Snapshot (paise optional)</label><input id="consumeUnitCostPaise" placeholder="1500" /></div>
-              <div><label>Line Cost (paise optional)</label><input id="consumeLineCostPaise" placeholder="1500" /></div>
-            </div>
-            <label>Notes</label>
-            <input id="consumeNotes" placeholder="Used during repair" />
-            <button id="consumeOnCaseBtn" class="accent">Consume on Case</button>
-            <div class="row">
-              <button id="loadCaseConsumptionBtn" class="ghost">Load Case Consumption</button>
-              <button id="verifyLedgerBtn" class="ghost">Quick Ledger Verify</button>
-            </div>
-
-            <h3>Correction/Reversal Helper</h3>
-            <div class="workflow-grid">
-              <div><label>Original Consumption ID</label><input id="correctionConsumptionId" placeholder="consumption_id" /></div>
-              <div><label>Correction Qty</label><input id="correctionQty" value="1" /></div>
-              <div><label>Correction Type</label><select id="correctionType"><option value="FULL_REVERSAL">FULL_REVERSAL</option><option value="PARTIAL_REVERSAL">PARTIAL_REVERSAL</option><option value="COST_CORRECTION">COST_CORRECTION</option></select></div>
-              <div><label>Correction Reason</label><input id="correctionReason" placeholder="wrong qty entered" /></div>
-            </div>
-            <div class="row">
-              <button id="prepareCorrectionNoteBtn" class="warn">Prepare Correction Note</button>
-              <button id="verifyCorrectionRefBtn" class="ghost">Verify Original Ledger Ref</button>
-            </div>
-            <pre id="phase5CorrectionResult"></pre>
-            <pre id="phase5Result"></pre>
-            <pre id="phase5LedgerResult"></pre>
-          </details>
-
-          <details class="card" open>
-            <summary>Expenses + Recurring Bills (Phase 6)</summary>
-            <h3>Expenses</h3>
-            <div class="workflow-grid">
-              <div><label>Expense Date (YYYY-MM-DD)</label><input id="expenseDateLocal" placeholder="2026-03-08" /></div>
-              <div><label>Category</label><input id="expenseCategory" value="tea" /></div>
-              <div><label>Amount (paise)</label><input id="expenseAmountPaise" value="15000" /></div>
-              <div><label>Payment Mode</label><input id="expensePaymentMode" value="cash" /></div>
-            </div>
-            <label>Expense Note</label>
-            <input id="expenseNote" placeholder="shop tea and snacks" />
-            <div class="row"><button id="createExpenseBtn">Create Expense</button><button id="loadExpensesBtn" class="ghost">Load Expenses</button></div>
-
-            <h3>Recurring Bills</h3>
-            <div class="workflow-grid">
-              <div><label>Bill Name</label><input id="billName" value="Electricity" /></div>
-              <div><label>Bill Category</label><input id="billCategory" value="utilities" /></div>
-              <div><label>Bill Amount (paise)</label><input id="billAmountPaise" value="350000" /></div>
-              <div><label>Due Date (YYYY-MM-DD)</label><input id="billDueDate" placeholder="2026-03-15" /></div>
-              <div><label>Frequency (days)</label><input id="billFrequencyDays" value="30" /></div>
-              <div><label>Reminder Offsets (comma)</label><input id="billReminderOffsets" value="7,3,0" /></div>
-            </div>
-            <div class="row"><button id="createBillBtn" class="accent">Create Recurring Bill</button><button id="loadBillsBtn" class="ghost">Load Recurring Bills</button></div>
-
-            <h3>Bill Payment Log</h3>
-            <div class="workflow-grid">
-              <div><label>Recurring Bill ID</label><input id="billId" placeholder="bill_id" /></div>
-              <div><label>Paid Amount (paise, optional)</label><input id="billPayAmountPaise" placeholder="blank uses bill amount" /></div>
-              <div><label>Payment Mode</label><input id="billPayMode" value="bank_transfer" /></div>
-              <div><label>Payment Note</label><input id="billPayNote" placeholder="paid on net banking" /></div>
-            </div>
-            <button id="payBillBtn" class="warn">Log Bill Payment + Roll Due Date</button>
-            <pre id="phase6Result"></pre>
-          </details>
         </section>
 
         <section class="lane" id="lane-analytics">
           <div class="lane-head">
-            <h2>Lane 3: Analytics</h2>
+            <h2>Analytics</h2>
             <p class="hint">Role-aware analytics and trend slices, loaded only when needed.</p>
           </div>
           <details class="card" open>
-            <summary>Analytics Overview (Phase 8)</summary>
+            <summary>Analytics Overview</summary>
             <div class="workflow-grid">
               <div><label>Window Days</label><input id="analyticsDays" value="30" /></div>
               <div><label>Query Timeout (ms)</label><input id="analyticsTimeoutMs" value="9000" /></div>
@@ -580,11 +536,11 @@
 
         <section class="lane" id="lane-hr">
           <div class="lane-head">
-            <h2>Lane 4: HR (Admin Only)</h2>
+            <h2>HR (Admin Only)</h2>
             <p class="hint">Attendance and advances are intentionally separated as lowest-priority daily workflow.</p>
           </div>
           <details class="card" open>
-            <summary>HR Operations (Phase 9)</summary>
+            <summary>HR Operations</summary>
             <h3>Attendance Upsert</h3>
             <div class="workflow-grid">
               <div><label>Employee Code</label><input id="hrEmployeeCode" placeholder="EMP-001" /></div>
@@ -618,6 +574,7 @@
           </details>
         </section>
       </div>
+    </section>
     </div>
   </main>
 
